@@ -1,1 +1,30 @@
+# Ignore your Python virtual environment
 PrimePyVenv/
+
+# Ignore LaTeX build artifacts
+docs/*.aux
+docs/*.log
+docs/*.toc
+docs/*.out
+docs/*.fls
+docs/*.fdb_latexmk
+
+# Optional: ignore backup or intermediate LaTeX files
+docs/*.synctex.gz
+docs/*.bbl
+docs/*.blg
+
+# Ignore compiled Python files
+__pycache__/
+*.pyc
+
+# Ignore compiled shared libraries
+*.so
+*.o
+*.a
+
+# Ignore build directory (CMake)
+cpp/build/
+
+
+.DS_Store
