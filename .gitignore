@@ -1,3 +1,6 @@
+# Ignore all py_tests.py files
+**/py_tests.py
+
 # Ignore your Python virtual environment
 PrimePyVenv/
 
@@ -28,3 +31,7 @@ cpp/build/
 
 
 .DS_Store
+
+# Ignore external libraries
+cpp/external/eigen/
+cpp/external/pybind11/

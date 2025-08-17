@@ -35,12 +35,10 @@ PrimePy/
 ├── tests/                     # Python unit tests
 │
 ├── docs/                      # Project documentation (LaTeX)
-│   ├── introduction.tex       # Intro to the project
-│   ├── algebraic_NT.tex       # Algebraic number theory
-│   ├── analytic_NT.tex        # Analytic number theory
-│   ├── crypto.tex             # Cryptography
 │   └── main.tex               # Master document
 │
 ├── requirements.txt           # Python dependencies
 ├── pyproject.toml             # Optional Python packaging configuration
 └── README.md                  # This file
+
+
