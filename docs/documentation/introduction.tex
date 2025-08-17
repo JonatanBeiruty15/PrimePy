@@ -1,6 +1,6 @@
 \section{Introduction}
 
-\texttt{PrimePy} is a C++ number theory library with Python bindings, designed for high-performance computation and symbolic experimentation.
+\texttt{PrimePy} is a Python number theory library with C++ backend, designed for high-performance computation and symbolic experimentation.
 
 It is structured into three primary components:
 \begin{enumerate}
@@ -8,10 +8,34 @@ It is structured into three primary components:
     \item Algebraic Number Theory
     \item Cryptographic Algorithms
 \end{enumerate}
-The PrimePy project is guided by the following core principles:
+The PrimePy project is guided by the following Philosophy:
 \begin{itemize}
     \item \textbf{Pythonic interface:} A simple and flexible Python API that feels native and encourages experimentation.
     \item \textbf{High-performance C++ backend:} Core computations are implemented in C++ for speed and scalability.
     \item \textbf{Seamless visualization:} Built-in support for intuitive and customizable visualization of number-theoretic objects and results.
     \item \textbf{Minimal and general abstractions:} Mathematical structures are defined in a general and reusable way, without unnecessary overhead.
 \end{itemize}
+
+
+\subsection{Philosophy}
+
+\texttt{PrimePy} is designed with several principles in mind:
+
+\paragraph{1. Data Types — Precision Over Approximation}  
+\textcolor{red}{TODO}
+
+
+\paragraph{2. Parallel Computation — Scalar Logic, Vector Execution}  
+All scalar operations in the library are automatically extended to \textbf{vectorized operations}, allowing users to apply the same logic to entire collections of values with minimal effort.
+
+For example, consider the method \texttt{.power(a, n)} which computes $a^n$:
+
+\begin{itemize}
+  \item If \texttt{a} is a scalar and \texttt{n} is a scalar, it returns $a^n$.
+  \item If \texttt{a} is a list $[a_1, a_2, \dots, a_k]$ and \texttt{n} is a scalar $m$, the function returns $[a_1^m, a_2^m, \dots, a_k^m]$.
+  \item If both \texttt{a} and \texttt{n} are lists of the same length, the function performs element-wise exponentiation:
+  \[
+    \texttt{power(}[a_1, \dots, a_k], [n_1, \dots, n_k]\texttt{)} \rightarrow [a_1^{n_1}, \dots, a_k^{n_k}]
+  \]
+\end{itemize}
+
