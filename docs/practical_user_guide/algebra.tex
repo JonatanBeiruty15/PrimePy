@@ -1,0 +1,93 @@
+\section{Algebra}
+
+This section introduces the core abstract algebraic structures supported by the \texttt{PrimePie} library. We begin with a brief overview of each structure and then provide concrete examples of their implementations within the library.
+\newline
+\newline
+The main structures currently supported are:
+
+\begin{enumerate}
+  \item \textbf{Groups}
+  \item \textbf{Rings}
+\end{enumerate}
+
+
+
+\subsection{Additive Group Modulo $n$ (\texorpdfstring{$\mathbb{Z}/n\mathbb{Z}$}{Z/nZ})}
+
+The Python API exposes a thin, Pythonic wrapper over the C++ implementation. 
+Instantiate the additive group modulo $n$ and use the unified \texttt{power} method, which dispatches by argument shapes:
+\begin{itemize}
+  \item \texttt{power(int base, int exponent) -> int}
+  \item \texttt{power(Iterable[int] bases, int exponent) -> list[int]}
+  \item \texttt{power(Iterable[int] bases, Iterable[int] exponents) -> list[int]}
+\end{itemize}
+
+\paragraph{Example (basic usage).}
+\begin{verbatim}
+from primepie.algebra.algebraic_structures import AdditiveModGroup
+
+G = AdditiveModGroup(7)          # the additive group (Z/7Z, +)
+
+print(G.identity())              # 0
+print(G.inverse(3))              # 4   (since 3 + 4 ≡ 0 mod 7)
+print(G.operate(3, 6))           # 2   (3 + 6 ≡ 2 mod 7)
+
+# unified power (additive repeated operation)
+print(G.power(2, 3))             # 6   (2 + 2 + 2 ≡ 6 mod 7)
+print(G.power([1,2,3], 2))       # [2, 4, 6]
+print(G.power([1,2,3], [0,1,2])) # [0, 2, 6]
+\end{verbatim}
+
+\paragraph{Notes.}
+\begin{itemize}
+  \item The group law is addition mod $n$, so \texttt{power(b, k)} means adding \texttt{b} to itself \texttt{k} times (with negative exponents handled via the additive inverse).
+  \item All results are reduced into \([0, n-1]\).
+\end{itemize}
+
+\subsection{Ring of Integers Modulo $n$ (\texorpdfstring{$\mathbb{Z}/n\mathbb{Z}$}{Z/nZ})}
+
+The ring wrapper exposes both:
+\begin{itemize}
+  \item The \textbf{additive group interface} (\texttt{identity}, \texttt{inverse}, \texttt{operate}, and additive \texttt{power}).
+  \item The \textbf{ring primitives} (\texttt{zero}, \texttt{one}, \texttt{add}, \texttt{neg}, \texttt{mul}, \texttt{is\_equal}, \texttt{contains}).
+  \item A separate multiplicative power method, called \texttt{mpower}, which performs repeated multiplication under modulo $n$.
+\end{itemize}
+
+\paragraph{Example (basic usage).}
+\begin{verbatim}
+from primepie.algebra.algebraic_structures import IntegersModRing
+
+R = IntegersModRing(7)           # the ring Z/7Z
+
+print(R.zero(), R.one())         # 0 1
+print(R.add(5, 6))               # 4   (11 ≡ 4)
+print(R.neg(3))                  # 4   (-3 ≡ 4)
+print(R.mul(3, 5))               # 1   (15 ≡ 1)
+print(R.is_equal(10, 3))         # True
+
+# additive interface inherited from Group
+print(R.identity())              # 0
+print(R.inverse(3))              # 4
+print(R.operate(3, 6))           # 2
+print(R.power(2, 3))             # 6   (2+2+2 ≡ 6)
+
+# multiplicative power via mpower
+print(R.mpower(3, 0))            # 1
+print(R.mpower(3, 4))            # 4   (3^4 = 81 ≡ 4)
+print(R.mpower([1,2,3,6], 3))    # [1, 1, 6, 6]
+print(R.mpower([2,3,4,5],[0,1,2,3]))  # [1, 3, 2, 6]
+\end{verbatim}
+
+\paragraph{Notes.}
+\begin{itemize}
+  \item \textbf{Additive vs. Multiplicative Power.} 
+  \begin{itemize}
+    \item \texttt{power} uses the additive group structure: $a^k = a + \cdots + a$ ($k$ times).
+    \item \texttt{mpower} uses the multiplicative structure: $a^k = a \cdot \cdots \cdot a$ ($k$ times).
+  \end{itemize}
+  \item \textbf{Negative Exponents.} 
+    Additive powers accept negative exponents (using inverses). Multiplicative powers do not (unless the structure is a field, to be added in future versions).
+  \item \textbf{Zero Ring ($n=1$).} In $\mathbb{Z}/1\mathbb{Z}$ we have $0=1$, so both \texttt{zero()} and \texttt{one()} return $0$, and every product and sum is $0$.
+\end{itemize}
+
+

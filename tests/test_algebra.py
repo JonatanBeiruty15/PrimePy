@@ -29,6 +29,7 @@ def test_operate(group_mod7):
     assert group_mod7.operate(2, 2) == 4
 
 def test_power(group_mod7):
+    # additive power
     assert group_mod7.power(2, 3) == 6
     assert group_mod7.power(3, 2) == 6
 
@@ -65,21 +66,22 @@ def test_ring_primitives_mod7(ring_mod7):
     assert R.contains(12345) is True
     assert R.modulus == 7
 
-def test_ring_power_scalar_mod7(ring_mod7):
+def test_ring_mpower_scalar_mod7(ring_mod7):
     R = ring_mod7
-    assert R.power(3, 0) == 1
-    assert R.power(3, 1) == 3
-    assert R.power(3, 2) == 2     # 9 ≡ 2
-    assert R.power(3, 4) == 4     # 81 ≡ 4
+    # multiplicative power
+    assert R.mpower(3, 0) == 1
+    assert R.mpower(3, 1) == 3
+    assert R.mpower(3, 2) == 2     # 9 ≡ 2
+    assert R.mpower(3, 4) == 4     # 81 ≡ 4
 
-def test_ring_power_batch_same_exponent_mod7(ring_mod7):
+def test_ring_mpower_batch_same_exponent_mod7(ring_mod7):
     R = ring_mod7
-    out = R.power([1, 2, 3, 6], 3)
+    out = R.mpower([1, 2, 3, 6], 3)
     assert out == [1, 1, 6, 6]
 
-def test_ring_power_elementwise_mod7(ring_mod7):
+def test_ring_mpower_elementwise_mod7(ring_mod7):
     R = ring_mod7
-    out = R.power([2, 3, 4, 5], [0, 1, 2, 3])
+    out = R.mpower([2, 3, 4, 5], [0, 1, 2, 3])
     assert out == [1, 3, 2, 6]
 
 def test_ring_distributivity_spot_checks(ring_mod7):
@@ -93,18 +95,25 @@ def test_ring_distributivity_spot_checks(ring_mod7):
     rhs2 = R.add(R.mul(a, c), R.mul(b, c))
     assert lhs2 == rhs2
 
+def test_ring_add_mul_combination_example(ring_mod7):
+    R = ring_mod7
+    # (2 + 3) * 4 ≡ 5 * 4 ≡ 20 ≡ 6 (mod 7)
+    assert R.mul(R.add(2, 3), 4) == 6
+
 def test_ring_zero_ring_mod1(ring_mod1):
     R = ring_mod1
     assert R.zero() == 0
     assert R.one() == 0           # 0 = 1 in ℤ/1ℤ
     assert R.add(123, 456) == 0
     assert R.mul(123, 456) == 0
+    # multiplicative power in zero ring is 0 for n>0; also additive power is 0
+    assert R.mpower(5, 123456789) == 0
     assert R.power(5, 123456789) == 0
     assert R.is_equal(7, 0) is True
     assert R.modulus == 1
 
-def test_ring_negative_exponent_raises(ring_mod7):
+def test_ring_negative_exponent_raises_for_mpower(ring_mod7):
     R = ring_mod7
-    # pybind11 maps std::invalid_argument to ValueError by default
+    # mpower (multiplicative) should raise on negative exponent
     with pytest.raises(ValueError):
-        _ = R.power(3, -1)
+        _ = R.mpower(3, -1)

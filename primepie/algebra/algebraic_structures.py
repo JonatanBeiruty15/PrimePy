@@ -105,6 +105,7 @@ class Ring(Group):
 # Integers modulo n: ℤ/nℤ (wrapper)
 # ========================================
 
+
 class IntegersModRing(Ring):
     def __init__(self, modulus: int):
         cpp_instance = _core.algebra.IntegersModRing(modulus)
@@ -117,23 +118,23 @@ class IntegersModRing(Ring):
     def modulus(self) -> int:
         return self._backend.modulus
 
-    # --- private helpers ---
-    def _power_scalar(self, base: int, exponent: int):
-        return self._backend.power(int(base), int(exponent))
+    # --- multiplicative helpers (call backend .mpower) ---
+    def _mpower_scalar(self, base: int, exponent: int):
+        return self._backend.mpower(int(base), int(exponent))
 
-    def _power_batch(self, bases, exponent: int):
-        return self._backend.power(list(bases), int(exponent))
+    def _mpower_batch(self, bases, exponent: int):
+        return self._backend.mpower(list(bases), int(exponent))
 
-    def _power_elementwise(self, bases, exponents):
-        return self._backend.power(list(bases), [int(e) for e in exponents])
+    def _mpower_elementwise(self, bases, exponents):
+        return self._backend.mpower(list(bases), [int(e) for e in exponents])
 
-    # --- single public entrypoint ---
-    def power(self, base_or_bases, exponent_or_exponents):
+    # --- single public entrypoint for multiplicative power ---
+    def mpower(self, base_or_bases, exponent_or_exponents):
         """
-        Unified power:
-          - power(int base, int exponent) -> int
-          - power(Iterable[int] bases, int exponent) -> list[int]
-          - power(Iterable[int] bases, Iterable[int] exponents) -> list[int]
+        Multiplicative power on Z/nZ:
+          - mpower(int base, int exponent) -> int
+          - mpower(Iterable[int] bases, int exponent) -> list[int]
+          - mpower(Iterable[int] bases, Iterable[int] exponents) -> list[int]
 
         Note: negative exponents are not supported for general rings (backend will raise).
         """
@@ -141,38 +142,27 @@ class IntegersModRing(Ring):
         e = exponent_or_exponents
 
         if isinstance(b, int) and isinstance(e, int):
-            return self._power_scalar(b, e)
-
+            return self._mpower_scalar(b, e)
         if not isinstance(b, int) and isinstance(e, int):
-            return self._power_batch(b, e)
-
+            return self._mpower_batch(b, e)
         if not isinstance(b, int) and not isinstance(e, int):
-            return self._power_elementwise(b, e)
+            return self._mpower_elementwise(b, e)
 
-        raise TypeError("power expects (int,int), (Iterable[int],int), or (Iterable[int],Iterable[int]).")
-
-
-
+        raise TypeError("mpower expects (int,int), (Iterable[int],int), or (Iterable[int],Iterable[int]).")
 
 
 if __name__ == "__main__":
-    # ======================
-    # Groups (ℤ/7ℤ, additive)
-    # ======================
+    # Groups (Z/7Z, +)
     G = AdditiveModGroup(7)
     print("Additive group Z/7Z")
     print("identity:", G.identity())                 # 0
     print("inverse(3):", G.inverse(3))               # 4
     print("operate(3,6):", G.operate(3, 6))          # 2
-
-    # unified power
     print("power(2,3):", G.power(2, 3))              # 6
     print("power([1,2,3], 2):", G.power([1, 2, 3], 2))               # [2, 4, 6]
     print("power([1,2,3],[0,1,2]):", G.power([1, 2, 3], [0, 1, 2]))  # [0, 2, 6]
 
-    # ==========
-    # Rings ℤ/7ℤ
-    # ==========
+    # Ring Z/7Z
     R = IntegersModRing(7)
     print("\nRing Z/7Z")
     print("zero, one:", R.zero(), R.one())           # 0 1
@@ -181,7 +171,12 @@ if __name__ == "__main__":
     print("mul(3,5):", R.mul(3, 5))                  # 1
     print("is_equal(10,3):", R.is_equal(10, 3))      # True
 
-    # unified power (multiplicative)
-    print("power(3,4):", R.power(3, 4))              # 4
-    print("power([1,2,3,6], 3):", R.power([1, 2, 3, 6], 3))          # [1, 1, 6, 6]
-    print("power([2,3,4,5],[0,1,2,3]):", R.power([2, 3, 4, 5], [0, 1, 2, 3]))  # [1, 3, 2, 6]
+    # ADDITIVE power on the ring (inherited from Ring.power)
+    print("additive power R.power(3,4):", R.power(3, 4))  # 3+3+3+3 ≡ 5
+
+    # MULTIPLICATIVE power on the ring (IntegersModRing.mpower)
+    print("multiplicative R.mpower(3,4):", R.mpower(3, 4))                # 4
+    print("multiplicative R.mpower([1,2,3,6], 3):", R.mpower([1,2,3,6], 3))   # [1,1,6,6]
+    print("multiplicative R.mpower([2,3,4,5],[0,1,2,3]):",
+          R.mpower([2,3,4,5], [0,1,2,3]))                                 # [1,3,2,6]
+    print("(2 + 3) * 4:", R.mul(R.add(2, 3), 4))   # (2+3)*4 ≡ 20 ≡ 6 mod 7

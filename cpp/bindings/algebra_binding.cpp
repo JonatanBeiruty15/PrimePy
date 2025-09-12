@@ -45,7 +45,20 @@ void bind_algebra(py::module_& m) {
         .def("add",  &Ring<int>::add)
         .def("neg",  &Ring<int>::neg)
         .def("mul",  &Ring<int>::mul)
-        .def("is_equal", &Ring<int>::is_equal);
+        .def("is_equal", &Ring<int>::is_equal)
+        // additive power for any Ring via GroupUtils ---
+        .def("power", [](const Ring<int>& r, int base, int exp) {
+                return GroupUtils<int>::power(r, base, exp);           // additive
+            }, py::arg("base"), py::arg("exponent"),
+            py::call_guard<py::gil_scoped_release>())
+        .def("power", [](const Ring<int>& r, const std::vector<int>& bases, int exp) {
+                return GroupUtils<int>::power(r, bases, exp);          // additive
+            }, py::arg("bases"), py::arg("exponent"),
+            py::call_guard<py::gil_scoped_release>())
+        .def("power", [](const Ring<int>& r, const std::vector<int>& bases, const std::vector<int>& exps) {
+                return GroupUtils<int>::power(r, bases, exps);         // additive
+            }, py::arg("bases"), py::arg("exponents"),
+            py::call_guard<py::gil_scoped_release>());
 
     // Ring of integers modulo n: ℤ/nℤ
     py::class_<IntegersModRing, Ring<int>, std::shared_ptr<IntegersModRing>>(m, "IntegersModRing")
@@ -60,17 +73,18 @@ void bind_algebra(py::module_& m) {
         .def("is_equal", &IntegersModRing::is_equal)
         .def("contains", &IntegersModRing::contains)
         .def_property_readonly("modulus", &IntegersModRing::modulus)
-        // convenience: expose multiplicative power via RingUtils
-        .def("power", [](const IntegersModRing& R, int base, long long exp) {
+        // multiplicative power via RingUtils — use a distinct name to avoid clobbering additive Ring::power
+        .def("mpower", [](const IntegersModRing& R, int base, long long exp) {
                 return RingUtils<int>::power(R, base, exp);
-            }, py::arg("base"), py::arg("exponent")
-            , py::call_guard<py::gil_scoped_release>() )  // let long runs release the GIL
-        .def("power", [](const IntegersModRing& R, const std::vector<int>& bases, long long exp) {
+            }, py::arg("base"), py::arg("exponent"),
+            py::call_guard<py::gil_scoped_release>())
+        .def("mpower", [](const IntegersModRing& R, const std::vector<int>& bases, long long exp) {
                 return RingUtils<int>::power(R, bases, exp);
-            }, py::arg("bases"), py::arg("exponent")
-            , py::call_guard<py::gil_scoped_release>() )
-        .def("power", [](const IntegersModRing& R, const std::vector<int>& bases, const std::vector<long long>& exponents) {
+            }, py::arg("bases"), py::arg("exponent"),
+            py::call_guard<py::gil_scoped_release>())
+        .def("mpower", [](const IntegersModRing& R, const std::vector<int>& bases, const std::vector<long long>& exponents) {
                 return RingUtils<int>::power(R, bases, exponents);
-            }, py::arg("bases"), py::arg("exponents")
-            , py::call_guard<py::gil_scoped_release>() );
+            }, py::arg("bases"), py::arg("exponents"),
+            py::call_guard<py::gil_scoped_release>());
+            
     }

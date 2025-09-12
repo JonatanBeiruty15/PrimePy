@@ -1,6 +1,6 @@
-# PrimePy
+# PrimePie 🥧
 
-**PrimePy** is a modern, modular number theory library designed with a clean Pythonic interface and a high-performance C++ backend. It provides foundational algebraic and analytic tools for experimentation, research, and education in number theory, cryptography, and related areas.
+**PrimePie** is a modern, modular number theory library designed with a clean Pythonic interface and a high-performance C++ backend. It provides foundational algebraic and analytic tools for experimentation, research, and education in number theory, cryptography, and related areas.
 
 ---
 
@@ -31,7 +31,7 @@ PrimePy/
 │   ├── tests/                 # C++ unit tests
 │   └── CMakeLists.txt         # Build configuration
 │
-├── primepy/                   # Python interface (Pybind11-connected)
+├── primepie/                   # Python interface (Pybind11-connected)
 ├── tests/                     # Python unit tests
 │
 ├── docs/                      # Project documentation (LaTeX)
