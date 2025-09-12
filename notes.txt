@@ -2,3 +2,17 @@ always 3 types of operations so if we have the operation of a group a^n -- Power
 - scalar ; that we have a^n and get 1 result
 - vectorial with 1 power ; power(a_1,...a_n),m and it returns a vector of a_1^m , ... , a_n^m
 - double vectorial ; power(a_1,...a_n),m_1 , .... , m_n and returns  a_1^m_1 , ... , a_n^m_n (has to make sure that it's the same length)
+
+
+
+
+
+
+
+
+CMAKE file:
+- add the openMp #pragma
+find_package(OpenMP)
+if (OpenMP_CXX_FOUND)
+    target_link_libraries(primepy_core PUBLIC OpenMP::OpenMP_CXX)
+endif()

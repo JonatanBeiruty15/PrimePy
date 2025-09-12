@@ -2,10 +2,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='primepy',
+    name='primepie',
     version='0.1.0',
     author='JB15',
-    author_email='your.email@example.com',
+    author_email='BlahBlah@Harta.com',
     description='A number theory library with C++ backend and Python interface',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
