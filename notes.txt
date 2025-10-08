@@ -16,3 +16,8 @@ find_package(OpenMP)
 if (OpenMP_CXX_FOUND)
     target_link_libraries(primepy_core PUBLIC OpenMP::OpenMP_CXX)
 endif()
+
+
+TODO
+
+1. change the gcd function of integers to be also for vectors. maybe write this function for eucleadian rings in general.

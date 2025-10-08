@@ -1,5 +1,4 @@
 \section{Algebra}
-
 This section introduces the core abstract algebraic structures supported by the \texttt{PrimePie} library. We begin with a brief overview of each structure and then provide concrete examples of their implementations within the library.
 \newline
 \newline
@@ -12,7 +11,7 @@ The main structures currently supported are:
 
 
 
-\subsection{Additive Group Modulo $n$ (\texorpdfstring{$\mathbb{Z}/n\mathbb{Z}$}{Z/nZ})}
+\subsection{Additive Group Modulo \texorpdfstring{$n$}{n}(\texorpdfstring{$\mathbb{Z}/n\mathbb{Z}$}{Z/nZ})}
 
 The Python API exposes a thin, Pythonic wrapper over the C++ implementation. 
 Instantiate the additive group modulo $n$ and use the unified \texttt{power} method, which dispatches by argument shapes:
@@ -44,7 +43,7 @@ print(G.power([1,2,3], [0,1,2])) # [0, 2, 6]
   \item All results are reduced into \([0, n-1]\).
 \end{itemize}
 
-\subsection{Ring of Integers Modulo $n$ (\texorpdfstring{$\mathbb{Z}/n\mathbb{Z}$}{Z/nZ})}
+\subsection{Ring of Integers Modulo \texorpdfstring{$n$}{n}(\texorpdfstring{$\mathbb{Z}/n\mathbb{Z}$}{Z/nZ})}
 
 The ring wrapper exposes both:
 \begin{itemize}

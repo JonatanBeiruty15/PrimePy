@@ -43,7 +43,9 @@ int main() {
 // Groups
 //=======================================================================================
 
-
+//=====================
+//Additive Group mod n: ℤ/nℤ  tests
+//=====================
 
     AdditiveModGroup G(7);
 
@@ -105,6 +107,245 @@ int main() {
     }
 
     std::cout << "✅ All AdditiveModGroup & power tests passed.\n";
+
+
+//=====================
+// MultiplicativeModGroup (ℤ/nℤ)^* tests
+//=====================
+{
+    // Units modulo 7: {1,2,3,4,5,6}
+    MultiplicativeModGroup M7(7);
+
+    // Identity
+    EXPECT_EQ(M7.identity(), 1);
+
+    // Membership
+    for (int a = 1; a < 7; ++a) {
+        EXPECT_EQ(M7.contains(a), true);
+    }
+
+    // Inverse (3 * 5 ≡ 1 mod 7)
+    EXPECT_EQ(M7.inverse(3), 5);
+    EXPECT_EQ(M7.operate(3, M7.inverse(3)), M7.identity());
+
+    // Operate (multiplication mod 7)
+    EXPECT_EQ(M7.operate(3, 5), 1);  // 15 ≡ 1
+    EXPECT_EQ(M7.operate(2, 4), 1);  // 8 ≡ 1
+
+    // GroupUtils power uses the group law (multiplicative here)
+    EXPECT_EQ(GroupUtils<int>::power(M7, 3, 0), M7.identity()); // 3^0 = 1
+    EXPECT_EQ(GroupUtils<int>::power(M7, 3, 1), 3);
+    EXPECT_EQ(GroupUtils<int>::power(M7, 3, 2), 2); // 9 ≡ 2
+    EXPECT_EQ(GroupUtils<int>::power(M7, 3, 4), 4); // 81 ≡ 4
+
+    // Negative exponent uses multiplicative inverse
+    EXPECT_EQ(GroupUtils<int>::power(M7, 3, -1), M7.inverse(3));  // 3^{-1} ≡ 5
+    EXPECT_EQ(GroupUtils<int>::power(M7, 3, -2),
+              M7.operate(M7.inverse(3), M7.inverse(3)));          // 5*5 ≡ 4
+
+    // Batch power: same exponent for all
+    {
+        std::vector<int> bases = {2, 3, 4};
+        std::vector<int> expect = {
+            1, // 2^3 = 8 ≡ 1
+            6, // 3^3 = 27 ≡ 6
+            1  // 4^3 = 64 ≡ 1
+        };
+        EXPECT_VEC_EQ(GroupUtils<int>::power(M7, bases, 3), expect);
+    }
+
+    // Batch power: element-wise exponents
+    {
+        std::vector<int> bases = {2, 3, 5};
+        std::vector<int> exps  = {0, 1, 2};
+        std::vector<int> expect = {
+            1, // 2^0
+            3, // 3^1
+            4  // 5^2 = 25 ≡ 4
+        };
+        EXPECT_VEC_EQ(GroupUtils<int>::power(M7, bases, exps), expect);
+    }
+
+    // Edge cases: empty input
+    {
+        std::vector<int> empty;
+        EXPECT_VEC_EQ(GroupUtils<int>::power(M7, empty, 5), std::vector<int>{});
+    }
+
+    std::cout << "✅ MultiplicativeModGroup(Z/7Z)^* tests passed.\n";
+}
+
+{
+    // Mod 8: units are {1,3,5,7}; 2 is NOT a unit
+    MultiplicativeModGroup M8(8);
+
+    // contains()
+    EXPECT_EQ(M8.contains(1), true);
+    EXPECT_EQ(M8.contains(3), true);
+    EXPECT_EQ(M8.contains(5), true);
+    EXPECT_EQ(M8.contains(7), true);
+    EXPECT_EQ(M8.contains(2), false);
+    EXPECT_EQ(M8.contains(4), false);
+    EXPECT_EQ(M8.contains(6), false);
+
+    // inverse() should throw for non-unit (e.g., 2)
+    try {
+        (void)M8.inverse(2);
+        std::cerr << "❌ Expected exception not thrown for inverse(2) in (Z/8Z)^*.\n";
+        return 1;
+    } catch (const std::invalid_argument&) {
+        std::cout << "✅ Caught expected exception for inverse(2) (non-unit).\n";
+    }
+
+    // operate() should throw if any operand is not a unit
+    try {
+        (void)M8.operate(2, 3);
+        std::cerr << "❌ Expected exception not thrown for operate(2,3) in (Z/8Z)^*.\n";
+        return 1;
+    } catch (const std::invalid_argument&) {
+        std::cout << "✅ Caught expected exception for operate(2,3) (non-unit involved).\n";
+    }
+
+    // Valid operation with units
+    EXPECT_EQ(M8.operate(3, 3), 1); // 9 ≡ 1 mod 8
+
+    // Negative exponent via GroupUtils (on units)
+    EXPECT_EQ(GroupUtils<int>::power(M8, 3, -1), M8.inverse(3));
+
+    std::cout << "✅ MultiplicativeModGroup(Z/8Z)^* membership/throws tests passed.\n";
+}
+
+{
+    // Trivial case: mod 1 (everything maps to 0, group has a single element 0)
+    MultiplicativeModGroup M1(1);
+    EXPECT_EQ(M1.identity(), 0);
+    EXPECT_EQ(M1.contains(0), true);
+    EXPECT_EQ(M1.contains(42), true); // gcd(42,1)=1
+    EXPECT_EQ(M1.inverse(0), 0);      // only element is its own inverse
+    EXPECT_EQ(M1.operate(0, 0), 0);
+    EXPECT_EQ(GroupUtils<int>::power(M1, 0, 123), 0);
+    EXPECT_EQ(GroupUtils<int>::power(M1, 7, -5), 0);
+
+    std::cout << "✅ MultiplicativeModGroup(Z/1Z)^* trivial tests passed.\n";
+}
+
+
+
+
+
+
+
+//=====================
+// Direct product tests: 
+//=====================
+{
+    auto Gadd5 = std::make_shared<AdditiveModGroup>(5);          // order 5
+    auto Gmul7 = std::make_shared<MultiplicativeModGroup>(7);    // order 6
+    auto PG = GroupUtils<int>::direct_product<int,int>(Gadd5, Gmul7);
+
+    using P = std::pair<int,int>;
+
+    // identity should be (0, 1)
+    P e = PG->identity();
+    EXPECT_EQ(e.first,  Gadd5->identity());
+    EXPECT_EQ(e.second, Gmul7->identity());
+
+    // inverse: (3,3) -> (2,5)  since -3 ≡ 2 (mod 5), 3^{-1} ≡ 5 (mod 7)
+    P x{3,3};
+    P ix = PG->inverse(x);
+    EXPECT_EQ(ix.first,  Gadd5->inverse(3));
+    EXPECT_EQ(ix.second, Gmul7->inverse(3));
+    EXPECT_EQ(ix.first,  2);
+    EXPECT_EQ(ix.second, 5);
+
+    // operate: (1,3) * (4,5) -> ( (1+4) mod 5, (3*5) mod 7 ) = (0,1)
+    P a{1,3}, b{4,5};
+    P ab = PG->operate(a,b);
+    EXPECT_EQ(ab.first,  0);
+    EXPECT_EQ(ab.second, 1);
+
+    // Lagrange's theorem on the product group: |G| = 5*6 = 30
+    const int order_PG = 5 * 6;
+    for (int aa = 0; aa < 5; ++aa) {
+        for (int bb = 1; bb <= 6; ++bb) {
+            P g{aa, bb};
+            P g_pow = GroupUtils<P>::power(*PG, g, order_PG);
+            EXPECT_EQ(g_pow.first,  e.first);
+            EXPECT_EQ(g_pow.second, e.second);
+        }
+    }
+
+    std::cout << "✅ Direct product (Z/5Z,+) × (Z/7Z)^* basic + Lagrange tests passed.\n";
+}
+
+
+{
+    auto Gadd4 = std::make_shared<AdditiveModGroup>(4);  // order 4
+    auto Gadd6 = std::make_shared<AdditiveModGroup>(6);  // order 6
+    auto PG2 = GroupUtils<int>::direct_product<int,int>(Gadd4, Gadd6);
+
+    using P = std::pair<int,int>;
+    P e2 = PG2->identity();  // should be (0,0)
+    EXPECT_EQ(e2.first, 0);
+    EXPECT_EQ(e2.second,0);
+
+    // Sample operations
+    P u{3, 5}, v{2, 4};
+    P uv = PG2->operate(u, v);   // (3+2 mod 4, 5+4 mod 6) = (1,3)
+    EXPECT_EQ(uv.first,  1);
+    EXPECT_EQ(uv.second, 3);
+
+    // Inverse in additive groups: negate mod n
+    P iu = PG2->inverse(u);  // (-3 mod 4, -5 mod 6) = (1,1)
+    EXPECT_EQ(iu.first,  1);
+    EXPECT_EQ(iu.second, 1);
+    // u + iu = e
+    P check = PG2->operate(u, iu);
+    EXPECT_EQ(check.first,  e2.first);
+    EXPECT_EQ(check.second, e2.second);
+
+    // Lagrange: |G| = 24
+    const int order_PG2 = 4 * 6;
+    for (int a = 0; a < 4; ++a) {
+        for (int b = 0; b < 6; ++b) {
+            P g{a, b};
+            P g_pow = GroupUtils<P>::power(*PG2, g, order_PG2);
+            EXPECT_EQ(g_pow.first,  e2.first);
+            EXPECT_EQ(g_pow.second, e2.second);
+        }
+    }
+
+    std::cout << "✅ Direct product (Z/4Z,+) × (Z/6Z,+) basic + Lagrange tests passed.\n";
+}
+
+
+{
+    auto Gadd5 = std::make_shared<AdditiveModGroup>(5);
+    auto Gmul7 = std::make_shared<MultiplicativeModGroup>(7);
+    auto PG = GroupUtils<int>::direct_product<int,int>(Gadd5, Gmul7);
+
+    using P = std::pair<int,int>;
+    P g{2, 3};
+    int k = 11; // arbitrary exponent
+
+    // Power in the product
+    P gk = GroupUtils<P>::power(*PG, g, k);
+
+    // Power in each component, then pair
+    int left  = GroupUtils<int>::power(*Gadd5, 2, k); // repeated addition mod 5
+    int right = GroupUtils<int>::power(*Gmul7, 3, k); // multiplication mod 7
+
+    EXPECT_EQ(gk.first,  left);
+    EXPECT_EQ(gk.second, right);
+
+    std::cout << "✅ Product power equals component-wise power test passed.\n";
+}
+
+
+
+
+
+
 
 
 
@@ -224,6 +465,43 @@ int main() {
     EXPECT_EQ(lhs2, rhs2);
 
     std::cout << "✅ Distributivity spot checks passed.\n";
+}
+
+
+{
+    // 8) Deterministic primality: scalars and batch
+    Integers Z;
+
+    // ---- Scalar checks ----
+    EXPECT_EQ(Z.is_prime(-5), false);
+    EXPECT_EQ(Z.is_prime(0),  false);
+    EXPECT_EQ(Z.is_prime(1),  false);
+    EXPECT_EQ(Z.is_prime(4),  false);
+    EXPECT_EQ(Z.is_prime(9),  false);
+    EXPECT_EQ(Z.is_prime(21), false);
+    EXPECT_EQ(Z.is_prime(221), false);               // 13 * 17
+    EXPECT_EQ(Z.is_prime(1000000000000LL), false);   // 10^12, composite
+
+    EXPECT_EQ(Z.is_prime(2),  true);
+    EXPECT_EQ(Z.is_prime(3),  true);
+    EXPECT_EQ(Z.is_prime(5),  true);
+    EXPECT_EQ(Z.is_prime(7),  true);
+    EXPECT_EQ(Z.is_prime(11), true);
+    EXPECT_EQ(Z.is_prime(97), true);
+    EXPECT_EQ(Z.is_prime(1000000007LL), true);       // 1e9+7 (prime)
+
+    // ---- Batch check ----
+    std::vector<long long> nums = {
+        2, 4, 5, 9, 1, 97, 1000000007LL, 1000000000000LL
+    };
+    std::vector<bool> expected = {
+        true, false, true, false, false, true, true, false
+    };
+    std::vector<bool> flags = Integers::is_prime_array(nums);
+
+    EXPECT_VEC_EQ(flags, expected);
+
+    std::cout << "✅ Primality (scalar + batch) passed.\n";
 }
 
     return 0;

@@ -15,7 +15,9 @@ void bind_algebra(py::module_& m) {
 //=======================================================================================
 
     py::class_<Group<int>, std::shared_ptr<Group<int>>>(m, "Group");
-
+//=============================
+// Additive Group mod n: ℤ/nℤ
+//=============================
     py::class_<AdditiveModGroup, Group<int>, std::shared_ptr<AdditiveModGroup>>(m, "AdditiveModGroup")
         .def(py::init<int>())
         .def("identity", &AdditiveModGroup::identity)
@@ -30,6 +32,54 @@ void bind_algebra(py::module_& m) {
         .def("power", [](const AdditiveModGroup& g, const std::vector<int>& bases, const std::vector<int>& exponents) {
             return GroupUtils<int>::power(g, bases, exponents);
         });
+// =============================
+// Multiplicative Group mod n (ℤ/nℤ)^*
+// =============================
+    py::class_<MultiplicativeModGroup, Group<int>, std::shared_ptr<MultiplicativeModGroup>>(m, "MultiplicativeModGroup")
+        .def(py::init<int>(), py::arg("modulus"))
+        .def("identity", &MultiplicativeModGroup::identity)
+        .def("inverse",  &MultiplicativeModGroup::inverse)
+        .def("operate",  &MultiplicativeModGroup::operate)
+        .def("contains", &MultiplicativeModGroup::contains)
+        // Group-style power (uses the multiplicative law and inverse for negative exponents)
+        .def("power",
+            [](const MultiplicativeModGroup& g, int base, int exp) {
+                return GroupUtils<int>::power(g, base, exp);
+            },
+            py::arg("base"), py::arg("exponent"),
+            py::call_guard<py::gil_scoped_release>())
+        .def("power",
+            [](const MultiplicativeModGroup& g, const std::vector<int>& bases, int exp) {
+                return GroupUtils<int>::power(g, bases, exp);
+            },
+            py::arg("bases"), py::arg("exponent"),
+            py::call_guard<py::gil_scoped_release>())
+        .def("power",
+            [](const MultiplicativeModGroup& g, const std::vector<int>& bases, const std::vector<int>& exps) {
+                return GroupUtils<int>::power(g, bases, exps);
+            },
+            py::arg("bases"), py::arg("exponents"),
+            py::call_guard<py::gil_scoped_release>()); 
+
+//=============================
+// Direct product factory for groups
+//=============================
+
+    // Bind Group<std::pair<int,int>> so Python can hold product groups.
+    py::class_<Group<std::pair<int,int>>, std::shared_ptr<Group<std::pair<int,int>>>>(m, "GroupPair");
+
+    // Expose a free function to build direct products
+    m.def("direct_product",
+          [](std::shared_ptr<Group<int>> G1, std::shared_ptr<Group<int>> G2) {
+              // delegate to GroupUtils<int>::direct_product
+              return GroupUtils<int>::direct_product<int,int>(std::move(G1), std::move(G2));
+          },
+          py::arg("G1"), py::arg("G2"),
+          "Build the direct product G1 × G2 as a new group (over pairs).");
+
+
+
+
 
 
 //=======================================================================================
@@ -86,5 +136,42 @@ void bind_algebra(py::module_& m) {
                 return RingUtils<int>::power(R, bases, exponents);
             }, py::arg("bases"), py::arg("exponents"),
             py::call_guard<py::gil_scoped_release>());
+        
             
+
+    // Ring of integers: ℤ  (pybind11)
+
+    py::class_<Integers, Ring<int>, std::shared_ptr<Integers>>(m, "Integers")
+        .def(py::init<>())  // trivial ctor
+
+        // ring primitives
+        .def("zero", &Integers::zero)
+        .def("one",  &Integers::one)
+        .def("add",  &Integers::add)
+        .def("neg",  &Integers::neg)
+        .def("mul",  &Integers::mul)
+
+        // utilities/hooks
+        .def("is_equal", &Integers::is_equal)
+        .def("contains", &Integers::contains)
+
+        // static helpers
+        .def_static("gcd", &Integers::gcd, py::arg("a"), py::arg("b"))
+
+        // deterministic primality (scalar + batch)
+        .def_static("is_prime",
+            &Integers::is_prime,
+            py::arg("n"),
+            py::call_guard<py::gil_scoped_release>())
+        .def_static("is_prime_u64",
+            &Integers::is_prime_u64,
+            py::arg("n"),
+            py::call_guard<py::gil_scoped_release>())
+        .def_static("is_prime_array",
+            &Integers::is_prime_array,
+            py::arg("numbers"),
+            py::call_guard<py::gil_scoped_release>());
+
+
+
     }
