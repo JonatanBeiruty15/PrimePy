@@ -21,3 +21,7 @@ endif()
 TODO
 
 1. change the gcd function of integers to be also for vectors. maybe write this function for eucleadian rings in general.
+
+2. Think of a solution to the problem with the binding of the different types of algebraic structures
+
+3. Fix the code like blocks in the practical guide.

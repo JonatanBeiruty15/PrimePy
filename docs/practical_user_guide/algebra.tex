@@ -89,4 +89,81 @@ print(R.mpower([2,3,4,5],[0,1,2,3]))  # [1, 3, 2, 6]
   \item \textbf{Zero Ring ($n=1$).} In $\mathbb{Z}/1\mathbb{Z}$ we have $0=1$, so both \texttt{zero()} and \texttt{one()} return $0$, and every product and sum is $0$.
 \end{itemize}
 
+\subsection{Primality testing in Python}
 
+PrimePie exposes deterministic primality tests through the ring of integers
+\verb|Integers|. For convenience, you can test a single integer or a whole batch.
+
+\paragraph{Single values.}
+\begin{verbatim}
+from primepie.algebra.algebraic_structures import Integers
+
+print(Integers.is_prime(97))              # True
+print(Integers.is_prime(10007))           # True
+print(Integers.is_prime(10008))           # False
+
+# Edge cases
+print(Integers.is_prime(1))               # False
+print(Integers.is_prime(0))               # False
+print(Integers.is_prime(-11))             # False
+
+# Large (still within 64-bit range):
+print(Integers.is_prime(2305843009213693951))  # True (2^61 - 1)
+\end{verbatim}
+
+\paragraph{Batch mode.}
+Pass a list/tuple of integers and get back a list of booleans. This uses the same
+deterministic test internally, and can run in parallel when PrimePie is built
+with OpenMP.
+\begin{verbatim}
+nums = [2, 4, 5, 9, 1, 97, 1_000_000_007, 0, -11, 10007]
+flags = Integers.is_prime(nums)
+print(flags)   # [True, False, True, False, False, True, True, False, False, True]
+\end{verbatim}
+
+\paragraph{Filtering lists.}
+\begin{verbatim}
+data = list(range(90, 110))
+is_p  = Integers.is_prime(data)
+primes_only = [x for x, ok in zip(data, is_p) if ok]
+print(primes_only)  # [97, 101, 103, 107, 109]
+\end{verbatim}
+
+\paragraph{Using the precomputed prime table.}
+If you need fast access to small/medium primes by index, use the number theory API:
+\begin{verbatim}
+from primepie.number_theory import primes, nth_prime, first_primes, primes_table_size
+
+print(primes_table_size())       # e.g., 100000 (depends on build)
+print(nth_prime(1), nth_prime(10))   # 2, 29
+print(first_primes(10))              # [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+
+# Batch by indices (order preserved)
+print(nth_prime([2, 4, 3, 10, 6]))   # [3, 7, 5, 29, 13]
+
+# Slice-like access (1-based): Primes[1] == 2, Primes[1:6] -> [2,3,5,7,11]
+print(Primes[1], Primes[1:6])
+\end{verbatim}
+
+\paragraph{Performance tips.}
+\begin{itemize}
+  \item Use \verb|Integers.is_prime| for arbitrary integers within 64-bit range; it’s deterministic.
+  \item Use \verb|Integers.is_prime([...])| for large batches; it parallelizes when OpenMP is enabled.
+  \item Use \verb|nth_prime|/\verb|first_primes|/\verb|primes[...]| when you need many \emph{small} primes quickly by index; these read from the precomputed binary table without loading everything into RAM.
+\end{itemize}
+
+\paragraph{Error handling.}
+\begin{verbatim}
+# Integers.is_prime expects int or iterable of ints.
+try:
+    Integers.is_prime("13")   # wrong type
+except TypeError:
+    print("TypeError as expected")
+
+# The prime table uses 1-based indices:
+from primepie.number_theory import nth_prime
+try:
+    nth_prime(0)
+except ValueError:
+    print("ValueError as expected (1-based indexing)")
+\end{verbatim}

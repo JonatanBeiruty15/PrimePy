@@ -131,7 +131,7 @@ add_dependencies(primepy_core generate_primes_bin)
 
 # Install the binary into the Python package data folder
 install(FILES ${PRIMES_BIN}
-        DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/../primepy/data)
+        DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/../primepie/data)
 
 # ============================================
 # Build tests
@@ -172,6 +172,6 @@ if (BINDING_SOURCES)
 
     # Install the shared library into the Python package
     install(TARGETS _core
-            LIBRARY DESTINATION ../primepy/core
-            RUNTIME DESTINATION ../primepy/core)  # Windows runtime dir
+            LIBRARY DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/../primepie/core
+            RUNTIME DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/../primepie/core)  # Windows
 endif()

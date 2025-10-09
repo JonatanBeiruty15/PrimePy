@@ -15,7 +15,7 @@ PrimePyVenv/
 *.bbl
 *.blg
 
-# Optional: ignore backup or intermediate LaTeX files
+#ignore backup or intermediate LaTeX files
 docs/*.synctex.gz
 docs/*.bbl
 docs/*.blg

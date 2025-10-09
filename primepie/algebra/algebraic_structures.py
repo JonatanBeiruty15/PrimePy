@@ -1,9 +1,21 @@
+from __future__ import annotations
+"""
+primepie.algebra.algebraic_structures
+=====================================
+
+Python-side wrappers for algebraic structures:
+  • Group, AdditiveModGroup
+  • Ring, Integers, IntegersModRing
+backed by C++ classes in `_core.algebra`.
+"""
+
+from typing import List, Sequence, Union, overload
 from ..core import _core
 
 
-# ======================================================
+# ==================================================================================================
 # Groups
-# ======================================================
+# ==================================================================================================
 
 
 class Group:
@@ -69,9 +81,9 @@ class AdditiveModGroup(Group):
 
 
 
-# ======================================================
+# ==================================================================================================
 # Rings 
-# ======================================================
+# ==================================================================================================
 
 class Ring(Group):
     """
@@ -101,8 +113,77 @@ class Ring(Group):
         return self._backend.is_equal(a, b)
 
 
+
+
+
+class Integers(Ring):
+    """
+    Python wrapper for the C++ ring of integers ℤ.
+
+    Instance methods (ring operations):
+      - zero(), one(), add(a,b), neg(a), mul(a,b), is_equal(a,b), contains(a)
+      - power(...) (ADDITIVE power: repeated addition via the group law)
+
+    Static utilities:
+      - gcd(a, b)
+      - is_prime(n or [n1, n2, ...])  ← unified single + batch interface
+    """
+
+    def __init__(self) -> None:
+        cpp_instance = _core.algebra.Integers()
+        super().__init__(cpp_instance)
+
+    def __repr__(self) -> str:
+        return "Integers(ℤ)"
+
+    def contains(self, a: int) -> bool:
+        return self._backend.contains(int(a))
+
+    # ---------- additive power ----------
+    @overload
+    def power(self, base: int, exponent: int) -> int: ...
+    @overload
+    def power(self, bases: Sequence[int], exponent: int) -> List[int]: ...
+    @overload
+    def power(self, bases: Sequence[int], exponents: Sequence[int]) -> List[int]: ...
+
+    def power(self, base_or_bases, exponent_or_exponents):
+        b, e = base_or_bases, exponent_or_exponents
+        if isinstance(b, int) and isinstance(e, int):
+            return self._backend.power(int(b), int(e))
+        if not isinstance(b, int) and isinstance(e, int):
+            return self._backend.power(list(b), int(e))
+        if not isinstance(b, int) and not isinstance(e, int):
+            return self._backend.power(list(b), [int(x) for x in e])
+        raise TypeError("power expects (int,int), (Iterable[int],int), or (Iterable[int],Iterable[int]).")
+
+    # ---------- static helpers ----------
+    @staticmethod
+    def gcd(a: int, b: int) -> int:
+        """Greatest common divisor of a and b."""
+        return _core.algebra.Integers.gcd(int(a), int(b))
+
+    # unified single + batch primality
+    @staticmethod
+    def is_prime(n_or_seq: Union[int, Sequence[int]]) -> Union[bool, List[bool]]:
+        """
+        Deterministic primality test.
+
+        - is_prime(n: int) -> bool
+        - is_prime([n1, n2, ...]) -> list[bool]
+        """
+        if isinstance(n_or_seq, int):
+            return _core.algebra.Integers.is_prime(int(n_or_seq))
+        if isinstance(n_or_seq, (list, tuple, set)):
+            return list(_core.algebra.Integers.is_prime_array([int(x) for x in n_or_seq]))
+        raise TypeError("is_prime expects int or iterable of ints")
+
+
+
+
+
 # ========================================
-# Integers modulo n: ℤ/nℤ (wrapper)
+# Integers modulo n: ℤ/nℤ
 # ========================================
 
 
@@ -151,6 +232,16 @@ class IntegersModRing(Ring):
         raise TypeError("mpower expects (int,int), (Iterable[int],int), or (Iterable[int],Iterable[int]).")
 
 
+
+
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
     # Groups (Z/7Z, +)
     G = AdditiveModGroup(7)
@@ -180,3 +271,36 @@ if __name__ == "__main__":
     print("multiplicative R.mpower([2,3,4,5],[0,1,2,3]):",
           R.mpower([2,3,4,5], [0,1,2,3]))                                 # [1,3,2,6]
     print("(2 + 3) * 4:", R.mul(R.add(2, 3), 4))   # (2+3)*4 ≡ 20 ≡ 6 mod 7
+
+
+
+
+    print("\n=== Integers.is_prime (unified scalar + batch) ===")
+
+    # scalar checks
+    assert Integers.is_prime(2) is True
+    assert Integers.is_prime(3) is True
+    assert Integers.is_prime(4) is False
+    assert Integers.is_prime(1) is False
+    assert Integers.is_prime(0) is False
+    assert Integers.is_prime(-7) is False
+    assert Integers.is_prime(97) is True
+    assert Integers.is_prime(10007) is True
+    assert Integers.is_prime(1_000_000_007) is True  # large 32-bit prime
+
+    # batch check (order preserved)
+    nums = [2, 4, 5, 9, 1, 97, 1_000_000_007, 0, -11, 10007]
+    expected = [True, False, True, False, False, True, True, False, False, True]
+    out = Integers.is_prime(nums)
+    print("batch:", out)
+    assert out == expected, f"expected {expected}, got {out}"
+
+    # quick mixed sanity
+    assert Integers.is_prime([2, 3, 10, 11, 12]) == [True, True, False, True, False]
+
+    # (optional) error cases: wrong types should raise
+    try:
+        Integers.is_prime("13")  # type: ignore
+        raise AssertionError("Expected TypeError for string input")
+    except TypeError:
+        pass

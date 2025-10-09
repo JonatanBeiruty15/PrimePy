@@ -1,3 +1,77 @@
 \section{Algebra}
+\label{sec:algebra}
 
-The library uses several 
+The \texttt{primepie.algebra} module implements basic algebraic structures
+used throughout the library, with performance-critical paths implemented in C++
+and exposed to Python via \texttt{pybind11}.
+
+\subsection{Algebraic Hierarchy}
+
+At this stage the library provides two families of structures:
+
+\begin{itemize}
+  \item \textbf{Groups}: an abstract interface with a binary operation,
+        identity, and inverse. (In our Python API, the additive group
+        of $\mathbb{Z}/n\mathbb{Z}$ is exposed.)
+  \item \textbf{Rings}: extend groups by adding a multiplication together with
+        \texttt{one()} and \texttt{mul()}. We currently expose the ring of
+        integers $\mathbb{Z}$ and the modular rings $\mathbb{Z}/n\mathbb{Z}$.
+\end{itemize}
+
+Both C++ and Python sides offer consistent scalar and batched operations.
+
+\subsection{Exponentiation in Groups and Rings}
+
+Exponentiation is implemented generically via
+\texttt{GroupUtils::power} (additive/group law) and
+\texttt{RingUtils::power} (multiplicative law). Both use classical
+binary exponentiation, computing $a^n$ in $\mathcal{O}(\log n)$ steps by
+repeated squaring:
+\[
+a^n =
+\begin{cases}
+1, & n = 0,\\
+(a^{n/2})^2, & n \text{ even},\\
+a \cdot (a^{(n-1)/2})^2, & n \text{ odd}.
+\end{cases}
+\]
+In the group context, this means repeated application of the group operation
+(addition in additive groups). In the ring context, it means repeated
+multiplication (requiring $n \ge 0$ in general rings).
+
+\subsection{The Ring of Integers \texorpdfstring{$\mathbb{Z}$}{Z}}
+
+The class \texttt{Integers} models $(\mathbb{Z}, +, \cdot)$ and exposes
+canonical operations:
+\[
+\begin{aligned}
+a + b &= \texttt{add}(a,b), \qquad
+a \cdot b = \texttt{mul}(a,b), \\
+-a &= \texttt{neg}(a), \qquad
+0 = \texttt{zero}(), \; 1 = \texttt{one}().
+\end{aligned}
+\]
+These are implemented with native integer arithmetic. The unified \texttt{Ring}
+interface also underlies modular rings~$\mathbb{Z}/n\mathbb{Z}$.
+
+\subsubsection*{Greatest Common Divisor}
+
+\texttt{Integers::gcd} implements the Euclidean algorithm, returning a
+nonnegative result and obeying
+$\gcd(0,0)=0$, $\gcd(a,0)=|a|$, and $\gcd(0,b)=|b|$.
+The core loop is the standard reduction
+\[
+\texttt{while (b != 0)} \{ \; r = a \bmod b;\; a = b;\; b = r; \;\}.
+\]
+For batches, the same computation is applied elementwise (optionally in
+parallel when compiled with OpenMP).
+
+\subsubsection*{Deterministic Primality Testing}
+
+\texttt{Integers::is\_prime} is based on the Miller–Rabin test
+\cite{miller1976rabin}, made deterministic for all 64-bit integers by using a
+fixed set of bases. Small factors are removed by trial division over
+$\{2,3,5,7,11,13,17,19,23,29,31,37\}$ and then Miller–Rabin is run with that
+same set. For $n < 2^{64}$ this set of bases is sufficient to guarantee
+determinism \cite{jaeschke1993miller, sorenson2015strong}.
+
