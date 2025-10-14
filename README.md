@@ -19,26 +19,35 @@
   Mathematical structures (like groups, rings, fields) are implemented in a clean, extensible, and general way.
 
 ---
-
 ## 📁 Project Structure
 
 ```text
 PrimePy/
-├── cpp/                       # C++ source code
-│   ├── include/               # Header files (e.g., algebra, analytic, bindings)
+├── cpp/                       # C++ sources and build system
+│   ├── include/               # Public headers (algebra, number theory, …)
 │   ├── src/                   # C++ implementations
-│   ├── bindings/              # Pybind11 wrappers
+│   ├── bindings/              # pybind11 wrappers (C++ ↔ Python)
 │   ├── tests/                 # C++ unit tests
-│   └── CMakeLists.txt         # Build configuration
+│   ├── external/              # Third-party deps (e.g., pybind11, Eigen)
+│   ├── tools/                 # Dev/build helper scripts
+│   └── CMakeLists.txt         # CMake build config
 │
-├── primepie/                   # Python interface (Pybind11-connected)
+├── primepie/                  # Python package (front-end API)
+│   ├── algebra/               # Pythonic algebra wrappers
+│   ├── core/                  # Low-level Python shims to the C++ core
+│   ├── data/                  # Static data / tables (if any)
+│   └── number_theory/         # Number theory APIs (primes, nth_prime, …)
+│
 ├── tests/                     # Python unit tests
+│   ├── test_algebra.py
+│   └── test_number_theory.py
 │
-├── docs/                      # Project documentation (LaTeX)
-│   └── main.tex               # Master document
+├── docs/                      # Documentation (LaTeX + assets)
+│   ├── documentation/         # Theory/reference docs (PDFs live here)
+│   ├── practical_user_guide/  # Practical guide (PDF here)
+│   └── figures/               # Images used by the docs
 │
 ├── requirements.txt           # Python dependencies
-├── pyproject.toml             # Optional Python packaging configuration
-└── README.md                  # This file
-
+├── pyproject.toml             # Python packaging config (build metadata)
+└── README.md                  # You are here
 
