@@ -14,6 +14,8 @@ PrimePyVenv/
 *.synctex.gz
 *.bbl
 *.blg
+*.listing
+*.xdv
 
 #ignore backup or intermediate LaTeX files
 docs/*.synctex.gz

@@ -22,6 +22,127 @@ TODO
 
 1. change the gcd function of integers to be also for vectors. maybe write this function for eucleadian rings in general.
 
-2. Think of a solution to the problem with the binding of the different types of algebraic structures
+2. Think of a solution to the problem with the binding of the different types of algebraic structures, and the mpower that are different
 
 3. Fix the code like blocks in the practical guide.
+
+4. implement in python all the rings i implemented in cpp
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{
+    "workbench.colorTheme": "Beautiful Dracula Darker",
+    "workbench.iconTheme": "vscode-icons",
+    "files.autoSave": "afterDelay",
+    "editor.fontLigatures": false,
+    "editor.tokenColorCustomizations": {
+        "textMateRules": [
+            {
+                "scope": "string.quoted.docstring.multi.python",
+                "settings": {
+                    "foreground": "#FFD700"  // Gold color for docstrings
+                }
+            },
+            {
+                "scope": "comment",
+                "settings": {
+                    "foreground": "#00FF00"  // Bright green for comments
+                }
+            },
+            {
+                "scope": "storage.type.class.python",
+                "settings": {
+                    "foreground": "#00a8fc"  // Bright green for comments
+                }
+            }
+        ]
+    },
+    "workbench.editorAssociations": {
+        "*.so": "default"
+    },
+    "editor.largeFileOptimizations": false,
+    "lean4.alwaysAskBeforeInstallingLeanVersions": true,
+    "python.defaultInterpreterPath": "/opt/homebrew/bin/python3",
+    "terminal.integrated.commandsToSkipShell": [
+        "matlab.interrupt"
+    ],
+    "MATLAB.installPath": "/Applications/MATLAB_R2025b.app",
+    "latex-workshop.latex.recipes": [
+        
+        {
+            "name": "latexmk",
+            "tools": [
+                "latexmk"
+            ]
+        },
+        {
+            "name": "latexmk (latexmkrc)",
+            "tools": [
+                "latexmk_rconly"
+            ]
+        },
+        {
+            "name": "latexmk (lualatex)",
+            "tools": [
+                "lualatexmk"
+            ]
+        },
+        {
+            "name": "latexmk (xelatex)",
+            "tools": [
+                "xelatexmk"
+            ]
+        },
+        {
+            "name": "pdflatex -> bibtex -> pdflatex * 2",
+            "tools": [
+                "pdflatex",
+                "bibtex",
+                "pdflatex",
+                "pdflatex"
+            ]
+        },
+        {
+            "name": "Compile Rnw files",
+            "tools": [
+                "rnw2tex",
+                "latexmk"
+            ]
+        },
+        {
+            "name": "Compile Jnw files",
+            "tools": [
+                "jnw2tex",
+                "latexmk"
+            ]
+        },
+        {
+            "name": "Compile Pnw files",
+            "tools": [
+                "pnw2tex",
+                "latexmk"
+            ]
+        },
+        {
+            "name": "tectonic",
+            "tools": [
+                "tectonic"
+            ]
+        }
+    ]
+}
+

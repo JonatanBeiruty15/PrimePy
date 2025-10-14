@@ -504,5 +504,157 @@ int main() {
     std::cout << "✅ Primality (scalar + batch) passed.\n";
 }
 
+
+//  9) Polynomials over Z: Z[x]
+
+{
+    PolynomialsOverIntegers P;
+
+    // 9.1) Zero / One / degree / is_zero
+    {
+        Poly z = P.zero();           // {}
+        Poly o = P.one();            // {1}
+        EXPECT_EQ(PolynomialsOverIntegers::degree(z), -1);
+        EXPECT_EQ(PolynomialsOverIntegers::degree(o), 0);
+        EXPECT_EQ(PolynomialsOverIntegers::is_zero(z), true);
+        EXPECT_EQ(PolynomialsOverIntegers::is_zero(o), false);
+
+        // zero should be canonical empty vector
+        EXPECT_VEC_EQ(z, Poly{});
+        EXPECT_VEC_EQ(o, Poly{1});
+
+        std::cout << "✅ Poly 9.1 (zero/one/degree/is_zero) passed.\n";
+    }
+
+    // 9.2) Add / Neg / Sub (basic)
+    {
+        Poly f{3, 2, 1};      // 3 + 2x + x^2
+        Poly g{1, -5};        // 1 - 5x
+        Poly sum = P.add(f, g);     // (3+1) + (2-5)x + 1x^2 = 4 - 3x + x^2
+        Poly negf = P.neg(f);       // -3 -2x - x^2
+        Poly f_minus_g = P.sub(f, g); // (3-1) + (2-(-5))x + x^2 = 2 + 7x + x^2
+
+        EXPECT_VEC_EQ(sum, Poly({4, -3, 1}));
+        EXPECT_VEC_EQ(negf, Poly({-3, -2, -1}));
+        EXPECT_VEC_EQ(f_minus_g, Poly({2, 7, 1}));
+
+        std::cout << "✅ Poly 9.2 (add/neg/sub) passed.\n";
+    }
+
+    // 9.3) Naive multiplication (small polys)
+    {
+        // (1 + 2x) * (3 + 4x) = 3 + 10x + 8x^2
+        Poly a{1, 2};
+        Poly b{3, 4};
+        Poly prod = P.mul_naive(a, b);
+        EXPECT_VEC_EQ(prod, Poly({3, 10, 8}));
+
+        // (5 - x + 2x^2) * (1 + x) = 5 + 4x + x^2 + 2x^3
+        Poly c{5, -1, 2};
+        Poly d{1, 1};
+        Poly prod2 = P.mul_naive(c, d);
+        EXPECT_VEC_EQ(prod2, Poly({5, 4, 1, 2}));
+
+        std::cout << "✅ Poly 9.3 (naive mul small) passed.\n";
+    }
+
+    // 9.4) Multiplication and trimming of trailing zeros
+    {
+        // (0 + 0x + 5x^2) * (0 + 1x) = 0 + 0x + 0x^2 + 5x^3
+        Poly a{0, 0, 5};
+        Poly b{0, 1};
+        Poly prod = P.mul_naive(a, b);
+        EXPECT_VEC_EQ(prod, Poly({0, 0, 0, 5})); // canonical keeps leading 5 at degree 3
+
+        // Trimming on add: [1,2,0,0] == [1,2]
+        Poly e{1, 2, 0, 0};
+        Poly f{1, 2};
+        EXPECT_EQ(P.is_equal(e, f), true);
+
+        std::cout << "✅ Poly 9.4 (mul + trimming) passed.\n";
+    }
+
+    // 9.5) Distributivity: f*(g+h) = f*g + f*h (check with naive)
+    {
+        Poly f{2, 0, 1};   // 2 + x^2
+        Poly g{1, 3};      // 1 + 3x
+        Poly h{-1, 4, 1};  // -1 + 4x + x^2
+
+        Poly gh = P.add(g, h);
+        Poly lhs = P.mul_naive(f, gh);
+        Poly rhs = P.add(P.mul_naive(f, g), P.mul_naive(f, h));
+        EXPECT_VEC_EQ(lhs, rhs);
+
+        std::cout << "✅ Poly 9.5 (distributivity with naive) passed.\n";
+    }
+
+    // 9.6) Default mul == naive mul (sanity)
+    {
+        Poly a{4, -2, 0, 7};   // 4 - 2x + 7x^3
+        Poly b{3, 1, 5};       // 3 + x + 5x^2
+        Poly m_def = P.mul(a, b);
+        Poly m_nv  = P.mul_naive(a, b);
+        EXPECT_VEC_EQ(m_def, m_nv);
+
+        std::cout << "✅ Poly 9.6 (mul == mul_naive) passed.\n";
+    }
+
+    // 9.7) Karatsuba vs Naive equivalence (medium polys)
+    {
+        // Deterministic “random-looking” coefficients
+        Poly a(50), b(45);
+        for (std::size_t i = 0; i < a.size(); ++i) a[i] = static_cast<std::int64_t>((int)(i % 7) - 3); // in [-3..3]
+        for (std::size_t j = 0; j < b.size(); ++j) b[j] = static_cast<std::int64_t>((int)(2*(j % 5)) - 4); // in [-4..4]
+
+        // ensure some non-trivial ends
+        a[0] = 5; a[1] = -2; a.back() = 3;
+        b[0] = -1; b[1] = 4; b.back() = -2;
+
+        Poly mk = P.mul_karatsuba(a, b);
+        Poly mn = P.mul_naive(a, b);
+        EXPECT_VEC_EQ(mk, mn);
+
+        std::cout << "✅ Poly 9.7 (karatsuba == naive) passed.\n";
+    }
+
+    // 9.8) Identity behavior: f*1 = f, f*0 = 0 (both mul variants)
+    {
+        Poly f{3, -1, 0, 2};  // 3 - x + 2x^3
+        Poly one = P.one();
+        Poly zero = P.zero();
+
+        EXPECT_VEC_EQ(P.mul_naive(f, one), f);
+        EXPECT_VEC_EQ(P.mul_karatsuba(f, one), f);
+
+        EXPECT_VEC_EQ(P.mul_naive(f, zero), Poly{});
+        EXPECT_VEC_EQ(P.mul_karatsuba(f, zero), Poly{});
+
+        std::cout << "✅ Poly 9.8 (identity/annihilator) passed.\n";
+    }
+
+    // 9.9) Pretty-print (to_string) and canonical equality
+    {
+        EXPECT_EQ(PolynomialsOverIntegers::to_string(Poly{}), "0");
+        EXPECT_EQ(PolynomialsOverIntegers::to_string(Poly{1}), "1");
+        EXPECT_EQ(PolynomialsOverIntegers::to_string(Poly{0, -1, 2}), "-x + 2x^2");
+        EXPECT_EQ(PolynomialsOverIntegers::to_string(Poly{3, -1, 0, 1}), "3 - x + x^3");
+
+        // canonical equality ignores trailing zeros
+        Poly a{1, 2, 0, 0};
+        Poly b{1, 2};
+        EXPECT_EQ(P.is_equal(a, b), true);
+
+        // sub agrees with add+neg
+        Poly f{2, 5, -3};
+        Poly g{1, -1, 4};
+        EXPECT_VEC_EQ(P.sub(f, g), P.add(f, P.neg(g)));
+
+        std::cout << "✅ Poly 9.9 (to_string + canonical equality + sub) passed.\n";
+    }
+}
+
+
+
+
     return 0;
 }

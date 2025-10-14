@@ -2,9 +2,10 @@
 primepie.algebra
 ================
 
- Wrappers for algebraic structures backed by C++:
+Wrappers for algebraic structures backed by C++:
   - Group, AdditiveModGroup
-  - Ring, Integers, IntegersModRing
+  - Ring, Integers, IntegersModRing, PolynomialsOverIntegers (Z[x])
+  
 """
 
 from .algebraic_structures import (
@@ -13,6 +14,7 @@ from .algebraic_structures import (
     Ring,
     Integers,
     IntegersModRing,
+    PolynomialsOverIntegers,
 )
 
 __all__ = [
@@ -21,4 +23,5 @@ __all__ = [
     "Ring",
     "Integers",
     "IntegersModRing",
+    "PolynomialsOverIntegers",
 ]

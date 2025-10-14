@@ -9,7 +9,7 @@ Python-side wrappers for algebraic structures:
 backed by C++ classes in `_core.algebra`.
 """
 
-from typing import List, Sequence, Union, overload
+from typing import List, Sequence, Union, overload, Literal, Iterable, Optional
 from ..core import _core
 
 
@@ -232,6 +232,142 @@ class IntegersModRing(Ring):
         raise TypeError("mpower expects (int,int), (Iterable[int],int), or (Iterable[int],Iterable[int]).")
 
 
+
+
+# ========================================
+# Polynomial over integers one variable : ℤ[X]
+# ========================================
+
+
+Poly = List[int]
+MulMethod = Literal["naive", "karatsuba", "auto"]
+
+def _as_poly(p: Iterable[int]) -> Poly:
+    """Coerce any iterable of ints into a list[int]; raises if not integers."""
+    if isinstance(p, (bytes, bytearray, str)):
+        raise TypeError("Polynomial coefficients must be integers, not strings/bytes.")
+    out = [int(c) for c in p]
+    return out
+
+class PolynomialsOverIntegers:
+    """
+    Z[x] wrapper.
+
+    Elements are represented as Python lists of ints in increasing degree order:
+        [a0, a1, ..., an]  <=>  a0 + a1 x + ... + an x^n
+
+    By default, multiplication uses a strategy you choose via `method`:
+      - "naive":     schoolbook O(n*m)
+      - "karatsuba": asymptotically faster for larger degree
+      - "auto":      pick per-call (currently defaults to "naive", customize below)
+
+    Examples
+    --------
+    >>> P = PolynomialsOverIntegers(method="karatsuba")
+    >>> f, g = [1,2,3], [3,0,-1]
+    >>> P.to_string(P.add(f,g))
+    '4 + 2x + 2x^2'
+    >>> P.to_string(P.mul(f,g))
+    '3 + 6x + 8x^2 - 2x^3 - 3x^4'
+    >>> P.mpower([0,1], 5)   # x^5
+    [0, 0, 0, 0, 0, 1]
+    """
+
+    def __init__(self, method: MulMethod = "naive"):
+        self._backend = _core.algebra.PolynomialsOverIntegers()
+        if method not in ("naive", "karatsuba", "auto"):
+            raise ValueError("method must be 'naive', 'karatsuba', or 'auto'")
+        self._method: MulMethod = method
+
+    # --------- configuration ---------
+    @property
+    def method(self) -> MulMethod:
+        return self._method
+
+    @method.setter
+    def method(self, value: MulMethod) -> None:
+        if value not in ("naive", "karatsuba", "auto"):
+            raise ValueError("method must be 'naive', 'karatsuba', or 'auto'")
+        self._method = value
+
+    # --------- ring primitives ---------
+    def zero(self) -> Poly:
+        return self._backend.zero()
+
+    def one(self) -> Poly:
+        return self._backend.one()
+
+    def add(self, f: Sequence[int], g: Sequence[int]) -> Poly:
+        return self._backend.add(_as_poly(f), _as_poly(g))
+
+    def neg(self, f: Sequence[int]) -> Poly:
+        return self._backend.neg(_as_poly(f))
+
+    def sub(self, f: Sequence[int], g: Sequence[int]) -> Poly:
+        return self._backend.sub(_as_poly(f), _as_poly(g))
+
+    # --------- multiplication ---------
+    def mul_naive(self, f: Sequence[int], g: Sequence[int]) -> Poly:
+        return self._backend.mul_naive(_as_poly(f), _as_poly(g))
+
+    def mul_karatsuba(self, f: Sequence[int], g: Sequence[int]) -> Poly:
+        return self._backend.mul_karatsuba(_as_poly(f), _as_poly(g))
+
+    def mul(
+        self,
+        f: Sequence[int],
+        g: Sequence[int],
+        method: Optional[MulMethod] = None
+    ) -> Poly:
+        """
+        Multiply f and g using:
+          - method="naive"     -> C++ schoolbook
+          - method="karatsuba" -> C++ karatsuba
+          - method=None        -> uses self.method
+          - method="auto"      -> currently defaults to naive; tweak this policy as you like.
+        """
+        m = self._method if method is None else method
+        f_, g_ = _as_poly(f), _as_poly(g)
+        if m == "naive":
+            return self._backend.mul_naive(f_, g_)
+        elif m == "karatsuba":
+            return self._backend.mul_karatsuba(f_, g_)
+        elif m == "auto":
+            # Policy: choose based on size; adjust threshold as you see fit.
+            # Simple default: use naive (it’s very fast for small/medium degrees).
+            # For example, switch at ~64 terms:
+            if max(len(f_), len(g_)) >= 64:
+                return self._backend.mul_karatsuba(f_, g_)
+            return self._backend.mul_naive(f_, g_)
+        else:
+            raise ValueError("Unknown method")
+
+
+
+    # --------- helpers / predicates ---------
+    def is_equal(self, f: Sequence[int], g: Sequence[int]) -> bool:
+        return self._backend.is_equal(_as_poly(f), _as_poly(g))
+
+    def contains(self, f: Sequence[int]) -> bool:
+        # C++ always returns true for any int-list representation
+        return self._backend.contains(_as_poly(f))
+
+    @staticmethod
+    def degree(f: Sequence[int]) -> int:
+        return _core.algebra.PolynomialsOverIntegers.degree(_as_poly(f))
+
+    @staticmethod
+    def is_zero(f: Sequence[int]) -> bool:
+        return _core.algebra.PolynomialsOverIntegers.is_zero(_as_poly(f))
+
+    @staticmethod
+    def normalize(f: Sequence[int]) -> Poly:
+        """Return a trimmed (canonical) copy."""
+        return _core.algebra.PolynomialsOverIntegers.normalized(_as_poly(f))
+
+    @staticmethod
+    def to_string(f: Sequence[int]) -> str:
+        return _core.algebra.PolynomialsOverIntegers.to_string(_as_poly(f))
 
 
 

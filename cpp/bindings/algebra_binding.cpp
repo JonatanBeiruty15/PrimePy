@@ -138,9 +138,9 @@ void bind_algebra(py::module_& m) {
             py::call_guard<py::gil_scoped_release>());
         
             
-
-    // Ring of integers: ℤ  (pybind11)
-
+//#####################################
+// Ring of integers: ℤ  
+//#####################################
     py::class_<Integers, Ring<int>, std::shared_ptr<Integers>>(m, "Integers")
         .def(py::init<>())  // trivial ctor
 
@@ -171,6 +171,55 @@ void bind_algebra(py::module_& m) {
             &Integers::is_prime_array,
             py::arg("numbers"),
             py::call_guard<py::gil_scoped_release>());
+
+
+
+//#####################################
+// Ring of Polinomials over Z : ℤ[X] 
+//#####################################
+
+    py::class_<PolynomialsOverIntegers>(m, "PolynomialsOverIntegers")
+        .def(py::init<>())
+
+        // Ring primitives
+        .def("zero", &PolynomialsOverIntegers::zero,
+             "Return the zero polynomial [] (canonical empty form).")
+        .def("one",  &PolynomialsOverIntegers::one,
+             "Return the constant one polynomial [1].")
+
+        // Additive ops
+        .def("add", &PolynomialsOverIntegers::add, py::arg("f"), py::arg("g"),
+             "f + g (coefficient-wise over Z).")
+        .def("neg", &PolynomialsOverIntegers::neg, py::arg("f"),
+             "-f")
+        .def("sub", &PolynomialsOverIntegers::sub, py::arg("f"), py::arg("g"),
+             "f - g")
+
+        // Multiplication
+        .def("mul", &PolynomialsOverIntegers::mul, py::arg("f"), py::arg("g"),
+             "f * g using the class's default algorithm (currently naive).")
+        .def("mul_naive", &PolynomialsOverIntegers::mul_naive, py::arg("f"), py::arg("g"),
+             "f * g using schoolbook O(n*m).")
+        .def("mul_karatsuba", &PolynomialsOverIntegers::mul_karatsuba, py::arg("f"), py::arg("g"),
+             "f * g using Karatsuba (faster for larger degree).")
+
+        // Equality / membership
+        .def("is_equal",   &PolynomialsOverIntegers::is_equal,   py::arg("f"), py::arg("g"),
+             "Compare canonical forms (after trimming).")
+        .def("contains",   &PolynomialsOverIntegers::contains,   py::arg("f"),
+             "Return True (any list[int] is valid).")
+
+        // Static helpers
+        .def_static("degree",     &PolynomialsOverIntegers::degree,     py::arg("f"),
+             "Degree of f, or -1 for the zero polynomial.")
+        .def_static("is_zero",    &PolynomialsOverIntegers::is_zero,    py::arg("f"),
+             "Whether f is the zero polynomial (after trimming).")
+        // expose a copy-normalizing helper because C++ normalize(Poly&) mutates:
+        .def_static("normalized",
+            [](Poly f){ PolynomialsOverIntegers::normalize(f); return f; }, py::arg("f"),
+            "Return a trimmed (canonical) copy of f.")
+        .def_static("to_string",  &PolynomialsOverIntegers::to_string,  py::arg("f"),
+             "Pretty print like '3 + 2x^2 - x^5'.");
 
 
 

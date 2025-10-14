@@ -2,7 +2,9 @@
 #include "algebraic_structures.h"
 #include <vector>
 #include <algorithm>
-
+#include <cstdint>
+#include <stdexcept>
+#include <string>
 
 
 namespace primepy::algebra {
@@ -139,7 +141,77 @@ private:
 };
 
 
+//=============================
+// Ring of Polynomials over Z; Z[X] in one variable
+//=============================
 
+/// Polynomial over Z represented as coefficients in increasing degree order:
+/// p(x) = coeffs[0] + coeffs[1] * x + ... + coeffs[n] * x^n
+using Poly = std::vector<std::int64_t>;
+
+/// Utility: remove trailing zeros so the representation is canonical.
+inline void trim_trailing_zeros(Poly& p) {
+    while (!p.empty() && p.back() == 0) p.pop_back();
+}
+
+/// Ring of polynomials Z[x] (one variable).
+/// Elements are Poly (std::vector<int64_t>) with canonical trimming.
+class PolynomialsOverIntegers final : public Ring<Poly> {
+public:
+    PolynomialsOverIntegers() = default;
+
+    // ---- Ring primitives over Poly (required overrides) ----
+    Poly zero() const override;                          // 0
+    Poly one()  const override;                          // 1
+
+    Poly add(const Poly& f, const Poly& g) const override; // f + g
+    Poly neg(const Poly& f) const override;                // -f
+
+    /// Default multiplication. Kept as the Ring<T>::mul override.
+    /// (Defined to call the naive version by default.)
+    Poly mul(const Poly& f, const Poly& g) const override; // f * g
+
+    // ---- Extra public API (explicit control from Python) ----
+
+    /// Schoolbook multiplication (O(n*m)).
+    Poly mul_naive(const Poly& f, const Poly& g) const;
+
+    /// Karatsuba multiplication (O(n^{log_2 3})) — faster for large polys.
+    Poly mul_karatsuba(const Poly& f, const Poly& g) const;
+
+    /// Subtraction convenience: f - g (implemented as add(f, neg(g))).
+    Poly sub(const Poly& f, const Poly& g) const {
+        return add(f, neg(g));
+    }
+
+    /// Degree of polynomial (−1 for the zero polynomial).
+    static int degree(const Poly& f) {
+        Poly tmp = f;
+        trim_trailing_zeros(tmp);
+        return tmp.empty() ? -1 : static_cast<int>(tmp.size()) - 1;
+    }
+
+    /// Zero check in canonical form.
+    static bool is_zero(const Poly& f) {
+        Poly tmp = f;
+        trim_trailing_zeros(tmp);
+        return tmp.empty();
+    }
+
+    /// Ensure canonical form (remove trailing zeros).
+    static void normalize(Poly& f) { trim_trailing_zeros(f); }
+
+    /// Pretty print, e.g. "3 + 2x^2 - x^5".
+    static std::string to_string(const Poly& f);
+
+    // ---- Equality hook (override if your Ring<T> exposes it) ----
+    bool is_equal(const Poly& f, const Poly& g) const override;
+
+    /// Membership check (always true for this representation).
+    bool contains(const Poly& f) const;
+
+    ///todo: find roots, decompose into prime factors.
+};
 
 
 

@@ -3,6 +3,12 @@
 #include <numeric>
 #include <stdexcept>
 #include <cstdlib>
+#include <cstdint>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <cmath>
+
 
 namespace primepy::algebra {
 
@@ -335,6 +341,197 @@ bool IntegersModRing::contains(const int& /*a*/) const {
 
 
 
+//=============================
+// Ring of Polynomials over Z; Z[X] in one variable
+//=============================
+
+// ----------- internal helpers for fast multiplication -----------
+namespace detail {
+
+    // Local add (no vtable call). Works on raw Poly and trims.
+    inline Poly poly_add(const Poly& a, const Poly& b) {
+        Poly r(std::max(a.size(), b.size()), 0);
+        for (std::size_t i = 0; i < r.size(); ++i) {
+            __int128 v = 0;
+            if (i < a.size()) v += a[i];
+            if (i < b.size()) v += b[i];
+            r[i] = static_cast<std::int64_t>(v);
+        }
+        trim_trailing_zeros(r);
+        return r;
+    }
+
+    // Local sub (no vtable call). r = a - b; trims.
+    inline Poly poly_sub(const Poly& a, const Poly& b) {
+        Poly r(std::max(a.size(), b.size()), 0);
+        for (std::size_t i = 0; i < r.size(); ++i) {
+            __int128 v = 0;
+            if (i < a.size()) v += a[i];
+            if (i < b.size()) v -= b[i];
+            r[i] = static_cast<std::int64_t>(v);
+        }
+        trim_trailing_zeros(r);
+        return r;
+    }
+
+    // Naive O(n*m) multiply with widened accumulation.
+    inline Poly naive_mul_raw(const Poly& f, const Poly& g) {
+        if (f.empty() || g.empty()) return {};
+        Poly result(f.size() + g.size() - 1, 0);
+        for (std::size_t i = 0; i < f.size(); ++i) {
+            for (std::size_t j = 0; j < g.size(); ++j) {
+                __int128 acc = static_cast<__int128>(result[i + j])
+                             + static_cast<__int128>(f[i]) * static_cast<__int128>(g[j]);
+                result[i + j] = static_cast<std::int64_t>(acc);
+            }
+        }
+        trim_trailing_zeros(result);
+        return result;
+    }
+
+    // Karatsuba multiply (recursive). Base-cases fall back to naive.
+    inline Poly karatsuba_mul_raw(const Poly& a, const Poly& b) {
+        if (a.empty() || b.empty()) return {};
+
+        const std::size_t n = a.size();
+        const std::size_t m = b.size();
+
+        // Base threshold; tune later if desired.
+        if (n <= 32 || m <= 32) {
+            return naive_mul_raw(a, b);
+        }
+
+        const std::size_t k = std::min(n, m) / 2;
+
+        // Split a = a0 + x^k a1 ; b = b0 + x^k b1
+        Poly a0(a.begin(), a.begin() + std::min(k, n));
+        Poly a1(a.begin() + std::min(k, n), a.end());
+        Poly b0(b.begin(), b.begin() + std::min(k, m));
+        Poly b1(b.begin() + std::min(k, m), b.end());
+        trim_trailing_zeros(a0); trim_trailing_zeros(a1);
+        trim_trailing_zeros(b0); trim_trailing_zeros(b1);
+
+        // z0 = a0*b0
+        Poly z0 = karatsuba_mul_raw(a0, b0);
+        // z2 = a1*b1
+        Poly z2 = karatsuba_mul_raw(a1, b1);
+        // z1 = (a0+a1)*(b0+b1) - z0 - z2
+        Poly a0a1 = poly_add(a0, a1);
+        Poly b0b1 = poly_add(b0, b1);
+        Poly z1   = karatsuba_mul_raw(a0a1, b0b1);
+        z1 = poly_sub(z1, z0);
+        z1 = poly_sub(z1, z2);
+
+        // Combine: res = z0 + (z1 << k) + (z2 << 2k)
+        Poly res = z0;
+
+        auto ensure = [&](std::size_t sz) {
+            if (res.size() < sz) res.resize(sz, 0);
+        };
+
+        // add z1 shifted by k
+        ensure(std::max(res.size(), z1.size() + k));
+        for (std::size_t i = 0; i < z1.size(); ++i) {
+            __int128 acc = static_cast<__int128>(res[i + k]) + z1[i];
+            res[i + k] = static_cast<std::int64_t>(acc);
+        }
+
+        // add z2 shifted by 2k
+        ensure(std::max(res.size(), z2.size() + 2 * k));
+        for (std::size_t i = 0; i < z2.size(); ++i) {
+            __int128 acc = static_cast<__int128>(res[i + 2 * k]) + z2[i];
+            res[i + 2 * k] = static_cast<std::int64_t>(acc);
+        }
+
+        trim_trailing_zeros(res);
+        return res;
+    }
+
+} // namespace detail
+
+// -------------------- ring primitives ------------------------
+
+Poly PolynomialsOverIntegers::zero() const { return Poly{}; }      // 0
+Poly PolynomialsOverIntegers::one()  const { return Poly{1}; }     // 1
+
+Poly PolynomialsOverIntegers::add(const Poly& f, const Poly& g) const {
+    const std::size_t n = std::max(f.size(), g.size());
+    Poly result(n, 0);
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::int64_t a = (i < f.size() ? f[i] : 0);
+        const std::int64_t b = (i < g.size() ? g[i] : 0);
+        result[i] = a + b;
+    }
+    trim_trailing_zeros(result);
+    return result;
+}
+
+Poly PolynomialsOverIntegers::neg(const Poly& f) const {
+    Poly result(f.size());
+    for (std::size_t i = 0; i < f.size(); ++i) result[i] = -f[i];
+    trim_trailing_zeros(result);
+    return result;
+}
+
+// Default public multiply = naive (keeps Ring<T>::mul implemented)
+Poly PolynomialsOverIntegers::mul(const Poly& f, const Poly& g) const {
+    return detail::naive_mul_raw(f, g);
+}
+
+// Explicit variants for external control (e.g., Python)
+Poly PolynomialsOverIntegers::mul_naive(const Poly& f, const Poly& g) const {
+    return detail::naive_mul_raw(f, g);
+}
+
+Poly PolynomialsOverIntegers::mul_karatsuba(const Poly& f, const Poly& g) const {
+    return detail::karatsuba_mul_raw(f, g);
+}
+
+// ---------------- equality + membership hooks ----------------
+
+bool PolynomialsOverIntegers::is_equal(const Poly& f, const Poly& g) const {
+    Poly a = f, b = g;
+    trim_trailing_zeros(a);
+    trim_trailing_zeros(b);
+    return a == b;
+}
+
+bool PolynomialsOverIntegers::contains(const Poly& /*f*/) const {
+    // Any std::vector<int64_t> is a valid element in this representation.
+    return true;
+}
+
+// ------------------------ pretty print -----------------------
+
+std::string PolynomialsOverIntegers::to_string(const Poly& f) {
+    Poly p = f;
+    trim_trailing_zeros(p);
+    if (p.empty()) return "0";
+
+    std::ostringstream out;
+    bool first = true;
+
+    for (std::size_t i = 0; i < p.size(); ++i) {
+        const auto c = p[i];
+        if (c == 0) continue;
+
+        // sign
+        if (!first) out << (c > 0 ? " + " : " - ");
+        else if (c < 0) out << "-";
+
+        // abs coeff (skip printing 1 for non-constant terms)
+        const auto abs_c = std::llabs(c);
+        if (!(abs_c == 1 && i > 0)) out << abs_c;
+
+        // x^i
+        if (i >= 1) out << "x";
+        if (i >= 2) out << "^" << i;
+
+        first = false;
+    }
+
+    return out.str();
+}
 
 
 } // namespace primepy::algebra

@@ -1,11 +1,70 @@
 \documentclass[11pt]{article}
-\usepackage[utf8]{inputenc}
-\usepackage{amsmath, amssymb}
+
+% ===== Fonts that always work with TeX Live (no fontspec needed) =====
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc} % harmless under XeLaTeX too
+\usepackage{newpxtext}      % Palatino-like text
+\usepackage{newpxmath}      % matching math
+\usepackage{lmodern}            % LM family
+\renewcommand{\ttdefault}{lmtt} % LM Typewriter for code/minted
+
+% ===== Math & layout =====
+\usepackage{mathtools}
 \usepackage{geometry}
 \geometry{margin=1in}
-\usepackage{hyperref}
 \usepackage{graphicx}
-\usepackage{listings}   % for source code
+
+% ===== Hyperref / Bookmarks (robust) =====
+\usepackage{hyperref}
+\usepackage{bookmark}
+\hypersetup{
+  unicode=true,
+  bookmarksopen=true,
+  bookmarksopenlevel=2
+}
+\bookmarksetup{depth=2} % sections & subsections only
+% Strip code-ish macros in PDF strings (bookmarks/outline)
+\pdfstringdefDisableCommands{%
+  \def\texttt#1{#1}%
+  \def\verb#1{#1}%
+}
+
+% ===== Code listings: minted (needs pygmentize + -shell-escape) =====
+\usepackage[cache=false]{minted}
+\setminted{
+  fontsize=\small,
+  frame=none,      % outer box draws the frame
+  breaklines=true,
+  autogobble=true
+}
+
+% --- boxed code blocks via tcolorbox + minted ---
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted,skins,breakable}
+\tcbset{listing engine=minted}
+
+% Reusable Python box (black title bar)
+\newtcblisting{pybox}{
+  enhanced,
+  minted language=python,
+  minted options={autogobble,breaklines,fontsize=\small},
+  colback=gray!5,
+  colframe=black,
+  colbacktitle=black,
+  fonttitle=\bfseries\color{white},
+  title=Python,
+  boxrule=0.7pt,
+  arc=2mm,
+  left=2mm, right=2mm, top=1mm, bottom=1mm,
+  listing only,
+  breakable
+}
+
+% Handy macros for common sets
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\R}{\mathbb{R}}
 
 \title{PrimePie: Number Theory Library -- Practical User Guide}
 \author{Jonatan Beiruty}
@@ -21,9 +80,9 @@
     {\LARGE Practical User Guide\par}
     \vspace{0.5cm}
     {\Large Jonatan Beiruty\par}
-    \vspace{0.3cm} % << smaller gap instead of \vfill
+    \vspace{0.3cm}
     {\large 24.7.2025\par}
-    \vspace{1cm}   % space before image
+    \vspace{1cm}
     \includegraphics[width=0.6\textwidth]{../figures/Practical_guide_cover.png}
 \end{titlepage}
 

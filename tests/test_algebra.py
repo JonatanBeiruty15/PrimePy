@@ -9,7 +9,7 @@ import pytest
 # -----------------------------------------------------------------------------------
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from primepie.algebra.algebraic_structures import AdditiveModGroup, IntegersModRing, Integers
+from primepie.algebra.algebraic_structures import AdditiveModGroup, IntegersModRing, Integers, PolynomialsOverIntegers
 
 
 # ===================================================================================
@@ -181,3 +181,133 @@ def test_integers_is_prime_type_errors():
     """is_prime should reject unsupported input types (e.g. strings)."""
     with pytest.raises(TypeError):
         Integers.is_prime("13")   # type: ignore
+
+
+
+
+
+# ===================================================================================
+# SECTION 3 — RING TESTS: Polynomials over Z ;Z[X]
+# ===================================================================================
+
+
+
+@pytest.fixture
+def R():
+    """The polynomial ring Z[x]."""
+    return PolynomialsOverIntegers()
+
+
+# -----------------------------
+# Basics: zero/one/degree/zero?
+# -----------------------------
+def test_poly_basics(R):
+    z = R.zero()
+    o = R.one()
+    assert z == []                 # canonical zero
+    assert o == [1]                # constant 1
+    assert R.degree(z) == -1
+    assert R.degree(o) == 0
+    assert R.is_zero(z) is True
+    assert R.is_zero(o) is False
+
+    # normalization trims trailing zeros
+    assert R.normalize([3, 0, 0]) == [3]
+    assert R.normalize([0, 0, 0]) == []
+
+
+# -----------------------------
+# Add / Neg / Sub
+# -----------------------------
+def test_poly_add_neg_sub(R):
+    a = [1, 2, 3]        # 1 + 2x + 3x^2
+    b = [4, -2]          # 4 - 2x
+    assert R.add(a, b) == [5, 0, 3]       # (1+4) + (2-2)x + 3x^2
+    assert R.neg(a) == [-1, -2, -3]
+    assert R.sub(a, b) == [-3, 4, 3]
+
+
+# -----------------------------
+# to_string
+# -----------------------------
+def test_poly_to_string(R):
+    cases = [
+        ([], "0"),
+        ([1], "1"),
+        ([-1], "-1"),
+        ([0, 1], "x"),
+        ([0, -1], "-x"),
+        ([3, 0, 2], "3 + 2x^2"),
+        ([-3, 1, -1, 0, 5], "-3 + x - x^2 + 5x^4"),
+    ]
+    for coeffs, want in cases:
+        assert R.to_string(coeffs) == want
+
+
+# -----------------------------
+# Multiplication (naive)
+# -----------------------------
+def test_poly_mul_naive_small(R):
+    a = [1, 2, 3]    # 1 + 2x + 3x^2
+    b = [4, 5]       # 4 + 5x
+    # Expected: 4 + 13x + 22x^2 + 15x^3
+    assert R.mul(a, b, method="naive") == [4, 13, 22, 15]
+
+    # with trailing zeros in inputs -> trimmed output
+    assert R.mul([1, 0, 0], [0, 0, 2], method="naive") == [0, 0, 2]
+
+
+# -----------------------------
+# Karatsuba vs Naive agreement
+# -----------------------------
+def test_poly_mul_methods_agree(R):
+    # random-ish shapes that trigger deeper recursion
+    a = [1, -2, 3, 0, 0, 4, 5, 0, -1]
+    b = [2, 0, 0, -3, 6, 1, 0, 0, 7, -5]
+    prod_naive = R.mul(a, b, method="naive")
+    prod_karat = R.mul(a, b, method="karatsuba")
+    assert prod_naive == prod_karat
+
+
+# -----------------------------
+# Distributivity: a*(b+c) = ab + ac
+# -----------------------------
+def test_poly_distributivity(R):
+    a = [1, 2, 1]         # 1 + 2x + x^2
+    b = [2, -1, 3]        # 2 - x + 3x^2
+    c = [0, 5]            # 5x
+    # Check both algorithms
+    for method in ("naive", "karatsuba"):
+        lhs = R.mul(a, R.add(b, c), method=method)
+        rhs = R.add(R.mul(a, b, method=method), R.mul(a, c, method=method))
+        assert lhs == rhs
+
+
+# -----------------------------
+# Identity & annihilator checks
+# -----------------------------
+def test_poly_identity_annihilator(R):
+    a = [3, 0, -2, 1]   # 3 - 2x^2 + x^3
+    z = R.zero()
+    o = R.one()
+    assert R.mul(a, o, method="naive") == a
+    assert R.mul(o, a, method="karatsuba") == a
+    assert R.mul(a, z, method="naive") == []
+    assert R.mul(z, a, method="karatsuba") == []
+
+
+# -----------------------------
+# Method property and auto
+# -----------------------------
+def test_poly_method_property_and_auto(R):
+    # default method is whatever you set in wrapper; we just ensure API works
+    a = [1, 1, 1, 1, 1, 1, 1]   # degree 6
+    b = [1, 2, 3, 4, 5, 6, 7]
+    # flip methods and ensure consistent results
+    R.method = "naive"
+    p1 = R.mul(a, b)  # uses current method
+    R.method = "karatsuba"
+    p2 = R.mul(a, b)
+    R.method = "auto"
+    p3 = R.mul(a, b)
+    assert p1 == p2 == p3
