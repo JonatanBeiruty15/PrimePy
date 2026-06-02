@@ -8,10 +8,26 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <array>
 
 
 namespace primepy::algebra {
 
+namespace {
+
+Integer integer_from_long_long(long long value) {
+    return Integer(std::to_string(value));
+}
+
+int normalize_mod_int(const Integer& value, int modulus) {
+    Integer r = value % modulus;
+    if (r < 0) {
+        r += modulus;
+    }
+    return r.get_si();
+}
+
+} // namespace
 
 //=======================================================================================
 // Groups
@@ -20,49 +36,97 @@ namespace primepy::algebra {
 //=====================
 // AdditiveModGroup
 //=====================
-AdditiveModGroup::AdditiveModGroup(int modulus) : mod(modulus) {
+AdditiveModGroup::AdditiveModGroup(int modulus)
+    : Group({GroupProperty::Finite, GroupProperty::Abelian}), mod(modulus)
+{
     if (modulus <= 0) {
         throw std::invalid_argument("Modulus must be positive.");
     }
 }
 
-int AdditiveModGroup::identity() const {
-    return 0;
+int AdditiveModGroup::normalize(const Integer& x) const {
+    return normalize_mod_int(x, mod);
 }
 
-int AdditiveModGroup::inverse(const int& a) const {
-    return (mod - (a % mod)) % mod;
+Element AdditiveModGroup::element(const Integer& value) const {
+    return Element(self(), normalize(value));
 }
 
-int AdditiveModGroup::operate(const int& a, const int& b) const {
-    return (a + b) % mod;
+Element AdditiveModGroup::identity() const {
+    return Element(self(), 0);
+}
+
+Element AdditiveModGroup::inverse(const Element& a) const {
+    require_parent(a, "AdditiveModGroup::inverse");
+    return Element(self(), normalize(-std::get<Integer>(a.data())));
+}
+
+Element AdditiveModGroup::operate(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "AdditiveModGroup::operate");
+    return Element(self(), normalize(
+        std::get<Integer>(a.data()) + std::get<Integer>(b.data())
+    ));
+}
+
+bool AdditiveModGroup::contains(const Element& a) const {
+    return a.parent().get() == this && std::holds_alternative<Integer>(a.data());
+}
+
+bool AdditiveModGroup::equals(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "AdditiveModGroup::equals");
+    return normalize(std::get<Integer>(a.data())) == normalize(std::get<Integer>(b.data()));
+}
+
+std::string AdditiveModGroup::repr(const Element& a) const {
+    require_parent(a, "AdditiveModGroup::repr");
+    return std::to_string(normalize(std::get<Integer>(a.data()))) + " mod " + std::to_string(mod);
+}
+
+Element AdditiveModGroup::power(const Element& base, long long exponent) const {
+    require_parent(base, "AdditiveModGroup::power");
+    return Element(self(), normalize(std::get<Integer>(base.data()) * integer_from_long_long(exponent)));
 }
 
 //=====================
 // MultiplicativeModGroup
 //=====================
 
-MultiplicativeModGroup::MultiplicativeModGroup(int modulus) : mod(modulus) {
+MultiplicativeModGroup::MultiplicativeModGroup(int modulus)
+    : Group({GroupProperty::Finite, GroupProperty::Abelian}), mod(modulus)
+{
     if (modulus <= 0) {
         throw std::invalid_argument("Modulus must be positive.");
     }
 }
 
-int MultiplicativeModGroup::identity() const {
-    // In Z/1Z the only class is 0, so 1 % 1 == 0 (still correct)
-    return 1 % mod;
+int MultiplicativeModGroup::normalize(const Integer& x) const {
+    return normalize_mod_int(x, mod);
 }
 
-int MultiplicativeModGroup::inverse(const int& a) const {
-    // Normalize a into [0, mod-1]
-    auto norm = [this](int x) {
-        int r = x % mod;
-        return (r < 0) ? r + mod : r;
-    };
-    int a0 = norm(a);
+bool MultiplicativeModGroup::contains_integer(const Integer& a) const {
+    return Integers::gcd(normalize(a), mod) == 1;
+}
+
+Element MultiplicativeModGroup::element(const Integer& value) const {
+    int v = normalize(value);
+    if (!contains_integer(v)) {
+        throw std::invalid_argument(
+            "MultiplicativeModGroup::element: element is not a unit modulo the modulus.");
+    }
+    return Element(self(), v);
+}
+
+Element MultiplicativeModGroup::identity() const {
+    // In Z/1Z the only class is 0, so 1 % 1 == 0 (still correct)
+    return Element(self(), 1 % mod);
+}
+
+Element MultiplicativeModGroup::inverse(const Element& a) const {
+    require_parent(a, "MultiplicativeModGroup::inverse");
+    int a0 = normalize(std::get<Integer>(a.data()));
 
     // Membership check via contains()
-    if (!contains(a0)) {
+    if (!contains_integer(a0)) {
         throw std::invalid_argument(
             "MultiplicativeModGroup::inverse: element not in the group (not coprime to modulus).");
     }
@@ -85,29 +149,38 @@ int MultiplicativeModGroup::inverse(const int& a) const {
 
     // r == 1 here because contains(a0) guaranteed gcd(a0, mod) == 1
     if (t < 0) t += mod;
-    return t;
+    return Element(self(), normalize(t));
 }
 
-int MultiplicativeModGroup::operate(const int& a, const int& b) const {
+Element MultiplicativeModGroup::operate(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "MultiplicativeModGroup::operate");
+
     // Enforce membership using contains()
     if (!contains(a) || !contains(b)) {
         throw std::invalid_argument(
             "MultiplicativeModGroup::operate: both operands must be units modulo the modulus.");
     }
 
-    // Normalize first to keep behavior clean with negatives
-    auto norm = [this](int x) {
-        int r = x % mod;
-        return (r < 0) ? r + mod : r;
-    };
-
-    long long a0 = norm(a);
-    long long b0 = norm(b);
-    return static_cast<int>((a0 * b0) % mod);
+    int a0 = normalize(std::get<Integer>(a.data()));
+    int b0 = normalize(std::get<Integer>(b.data()));
+    long long product = static_cast<long long>(a0) * static_cast<long long>(b0);
+    return Element(self(), normalize(integer_from_long_long(product)));
 }
 
-bool MultiplicativeModGroup::contains(const int& a) const {
-    return Integers::gcd(a, mod) == 1;
+bool MultiplicativeModGroup::contains(const Element& a) const {
+    return a.parent().get() == this
+        && std::holds_alternative<Integer>(a.data())
+        && contains_integer(std::get<Integer>(a.data()));
+}
+
+bool MultiplicativeModGroup::equals(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "MultiplicativeModGroup::equals");
+    return normalize(std::get<Integer>(a.data())) == normalize(std::get<Integer>(b.data()));
+}
+
+std::string MultiplicativeModGroup::repr(const Element& a) const {
+    require_parent(a, "MultiplicativeModGroup::repr");
+    return std::to_string(normalize(std::get<Integer>(a.data()))) + " mod " + std::to_string(mod);
 }
 
 
@@ -135,32 +208,50 @@ bool MultiplicativeModGroup::contains(const int& a) const {
 // Ring of integers: ℤ
 //=============================
 
-
-int Integers::zero() const {
-    return 0;
+Integers::Integers()
+    : Ring({GroupProperty::Abelian})
+{
 }
 
-int Integers::one() const {
-    return 1;
+Element Integers::element(const Integer& value) const {
+    return Element(self(), value);
 }
 
-int Integers::add(const int& a, const int& b) const {
-    // Plain integer addition (note: will overflow in int if very large)
-    return a + b;
+Element Integers::zero() const {
+    return Element(self(), 0);
 }
 
-int Integers::neg(const int& a) const {
-    return -a;
+Element Integers::one() const {
+    return Element(self(), 1);
 }
 
-int Integers::mul(const int& a, const int& b) const {
-    // Plain integer multiplication (note: will overflow in int if very large)
-    return a * b;
+Element Integers::add(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "Integers::add");
+    return Element(self(), std::get<Integer>(a.data()) + std::get<Integer>(b.data()));
 }
 
-// ----- Hooks -----
-bool Integers::is_equal(const int& a, const int& b) const {
-    return a == b;
+Element Integers::neg(const Element& a) const {
+    require_parent(a, "Integers::neg");
+    return Element(self(), -std::get<Integer>(a.data()));
+}
+
+Element Integers::mul(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "Integers::mul");
+    return Element(self(), std::get<Integer>(a.data()) * std::get<Integer>(b.data()));
+}
+
+bool Integers::contains(const Element& a) const {
+    return a.parent().get() == this && std::holds_alternative<Integer>(a.data());
+}
+
+bool Integers::equals(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "Integers::equals");
+    return std::get<Integer>(a.data()) == std::get<Integer>(b.data());
+}
+
+std::string Integers::repr(const Element& a) const {
+    require_parent(a, "Integers::repr");
+    return std::get<Integer>(a.data()).get_str();
 }
 
 // ----- gcd (Euclidean algorithm; returns nonnegative gcd; gcd(0,0)=0) -----
@@ -230,9 +321,12 @@ bool Integers::miller_rabin_witness(std::uint64_t a, std::uint64_t n) {
 
 
 // ---- Public API: deterministic primality ----
-bool Integers::is_prime(std::int64_t n) {
+bool Integers::is_prime(const Integer& n) {
     if (n < 2) return false;
-    return is_prime_u64(static_cast<std::uint64_t>(n));
+    if (mpz_fits_ulong_p(n.get_mpz_t())) {
+        return is_prime_u64(n.get_ui());
+    }
+    return mpz_probab_prime_p(n.get_mpz_t(), 25) != 0;
 }
 
 bool Integers::is_prime_u64(std::uint64_t n) {
@@ -263,14 +357,19 @@ bool Integers::is_prime_u64(std::uint64_t n) {
 
 
 // ---- Batch primality ----
-std::vector<bool> Integers::is_prime_array(const std::vector<std::int64_t>& nums) {
-    std::vector<bool> results(nums.size());
+std::vector<bool> Integers::is_prime_array(const std::vector<Integer>& nums) {
+    std::vector<unsigned char> tmp(nums.size());
 
 #ifdef _OPENMP
     #pragma omp parallel for
 #endif
     for (int i = 0; i < static_cast<int>(nums.size()); ++i) {
-        results[i] = is_prime(nums[i]);
+        tmp[i] = is_prime(nums[i]) ? 1 : 0;
+    }
+
+    std::vector<bool> results(nums.size());
+    for (std::size_t i = 0; i < tmp.size(); ++i) {
+        results[i] = (tmp[i] != 0);
     }
 
     return results;
@@ -286,7 +385,7 @@ std::vector<bool> Integers::is_prime_array(const std::vector<std::int64_t>& nums
 
 
 IntegersModRing::IntegersModRing(int modulus)
-    : mod(modulus)
+    : Ring({GroupProperty::Finite, GroupProperty::Abelian}), mod(modulus)
 {
     if (modulus <= 0) {
         throw std::invalid_argument("IntegersModRing: modulus must be positive.");
@@ -294,244 +393,279 @@ IntegersModRing::IntegersModRing(int modulus)
 }
 
 // --------- Ring primitives ---------
-int IntegersModRing::zero() const {
+Element IntegersModRing::element(const Integer& value) const {
+    return Element(self(), normalize(value));
+}
+
+Element IntegersModRing::zero() const {
     // Additive identity class
-    return 0;
+    return Element(self(), 0);
 }
 
-int IntegersModRing::one() const {
+Element IntegersModRing::one() const {
     // Multiplicative identity class [1]; for n=1 this is also 0
-    return normalize(1);
+    return Element(self(), normalize(1));
 }
 
-int IntegersModRing::add(const int& a, const int& b) const {
-    long long x = normalize(a);
-    long long y = normalize(b);
-    return normalize(static_cast<int>(x + y));
+Element IntegersModRing::add(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "IntegersModRing::add");
+    int x = normalize(std::get<Integer>(a.data()));
+    int y = normalize(std::get<Integer>(b.data()));
+    long long sum = static_cast<long long>(x) + static_cast<long long>(y);
+    return Element(self(), normalize(integer_from_long_long(sum)));
 }
 
-int IntegersModRing::neg(const int& a) const {
+Element IntegersModRing::neg(const Element& a) const {
+    require_parent(a, "IntegersModRing::neg");
     // (-a) mod n
-    long long v = - static_cast<long long>(a);
-    return normalize(static_cast<int>(v % mod));
+    Integer v = -std::get<Integer>(a.data());
+    return Element(self(), normalize(v));
 }
 
-int IntegersModRing::mul(const int& a, const int& b) const {
-    int x = normalize(a);
-    int y = normalize(b);
+Element IntegersModRing::mul(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "IntegersModRing::mul");
+    int x = normalize(std::get<Integer>(a.data()));
+    int y = normalize(std::get<Integer>(b.data()));
     long long p = static_cast<long long>(x) * static_cast<long long>(y);
-    return normalize(static_cast<int>(p % mod));
+    return Element(self(), normalize(integer_from_long_long(p)));
 }
 
 
-bool IntegersModRing::is_equal(const int& a, const int& b) const {
+bool IntegersModRing::contains(const Element& a) const {
+    return a.parent().get() == this && std::holds_alternative<Integer>(a.data());
+}
+
+bool IntegersModRing::equals(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "IntegersModRing::equals");
     // a ≡ b (mod n)  <=>  normalize(a - b) == 0
-    long long d = static_cast<long long>(a) - static_cast<long long>(b);
-    int r = static_cast<int>(d % mod);
-    return normalize(r) == 0;
+    Integer d = std::get<Integer>(a.data()) - std::get<Integer>(b.data());
+    return normalize(d) == 0;
 }
 
-bool IntegersModRing::contains(const int& /*a*/) const {
-    // Every integer represents a residue class modulo n
-    return true;
+std::string IntegersModRing::repr(const Element& a) const {
+    require_parent(a, "IntegersModRing::repr");
+    return std::to_string(normalize(std::get<Integer>(a.data()))) + " mod " + std::to_string(mod);
 }
-
-
-
-
 
 
 //=============================
-// Ring of Polynomials over Z; Z[X] in one variable
+// Polynomial ring in one variable: R[X]
 //=============================
 
-// ----------- internal helpers for fast multiplication -----------
-namespace detail {
+PolynomialRing::PolynomialRing(std::shared_ptr<const Ring> coefficient_ring,
+                               char variable,
+                               bool use_parentheses)
+    : Ring(infer_properties(coefficient_ring)),
+      coefficient_ring_(std::move(coefficient_ring)),
+      variable_(variable),
+      use_parentheses_(use_parentheses)
+{
+    if (!coefficient_ring_) {
+        throw std::invalid_argument("PolynomialRing: coefficient ring must be non-null.");
+    }
+    if (variable_ == '\0') {
+        throw std::invalid_argument("PolynomialRing: variable must be a non-null character.");
+    }
+}
 
-    // Local add (no vtable call). Works on raw Poly and trims.
-    inline Poly poly_add(const Poly& a, const Poly& b) {
-        Poly r(std::max(a.size(), b.size()), 0);
-        for (std::size_t i = 0; i < r.size(); ++i) {
-            __int128 v = 0;
-            if (i < a.size()) v += a[i];
-            if (i < b.size()) v += b[i];
-            r[i] = static_cast<std::int64_t>(v);
-        }
-        trim_trailing_zeros(r);
-        return r;
+std::vector<GroupProperty>
+PolynomialRing::infer_properties(const std::shared_ptr<const Ring>& coefficient_ring) {
+    if (!coefficient_ring) {
+        throw std::invalid_argument("PolynomialRing: coefficient ring must be non-null.");
     }
 
-    // Local sub (no vtable call). r = a - b; trims.
-    inline Poly poly_sub(const Poly& a, const Poly& b) {
-        Poly r(std::max(a.size(), b.size()), 0);
-        for (std::size_t i = 0; i < r.size(); ++i) {
-            __int128 v = 0;
-            if (i < a.size()) v += a[i];
-            if (i < b.size()) v -= b[i];
-            r[i] = static_cast<std::int64_t>(v);
-        }
-        trim_trailing_zeros(r);
-        return r;
+    std::vector<GroupProperty> properties;
+    if (coefficient_ring->has_property(GroupProperty::Abelian)) {
+        properties.push_back(GroupProperty::Abelian);
     }
+    return properties;
+}
 
-    // Naive O(n*m) multiply with widened accumulation.
-    inline Poly naive_mul_raw(const Poly& f, const Poly& g) {
-        if (f.empty() || g.empty()) return {};
-        Poly result(f.size() + g.size() - 1, 0);
-        for (std::size_t i = 0; i < f.size(); ++i) {
-            for (std::size_t j = 0; j < g.size(); ++j) {
-                __int128 acc = static_cast<__int128>(result[i + j])
-                             + static_cast<__int128>(f[i]) * static_cast<__int128>(g[j]);
-                result[i + j] = static_cast<std::int64_t>(acc);
+bool PolynomialRing::is_zero_coefficient(const Element& coefficient) const {
+    if (!coefficient_ring_->contains(coefficient)) {
+        throw std::invalid_argument("PolynomialRing: coefficient belongs to the wrong ring.");
+    }
+    return coefficient.equals(coefficient_ring_->zero());
+}
+
+void PolynomialRing::trim(Element::Vector& coefficients) const {
+    while (!coefficients.empty() && is_zero_coefficient(coefficients.back())) {
+        coefficients.pop_back();
+    }
+}
+
+Element::Vector PolynomialRing::coefficients_for(const Element& f) const {
+    if (f.parent().get() == this) {
+        if (!std::holds_alternative<Element::Vector>(f.data())) {
+            throw std::invalid_argument("PolynomialRing: polynomial element must store vector data.");
+        }
+
+        Element::Vector coefficients = std::get<Element::Vector>(f.data());
+        for (const auto& coefficient : coefficients) {
+            if (!coefficient_ring_->contains(coefficient)) {
+                throw std::invalid_argument(
+                    "PolynomialRing: polynomial coefficient belongs to the wrong coefficient ring.");
             }
         }
-        trim_trailing_zeros(result);
-        return result;
+        trim(coefficients);
+        return coefficients;
     }
 
-    // Karatsuba multiply (recursive). Base-cases fall back to naive.
-    inline Poly karatsuba_mul_raw(const Poly& a, const Poly& b) {
-        if (a.empty() || b.empty()) return {};
-
-        const std::size_t n = a.size();
-        const std::size_t m = b.size();
-
-        // Base threshold; tune later if desired.
-        if (n <= 32 || m <= 32) {
-            return naive_mul_raw(a, b);
+    if (f.parent().get() == coefficient_ring_.get()) {
+        if (!coefficient_ring_->contains(f)) {
+            throw std::invalid_argument(
+                "PolynomialRing: coefficient element is not contained in the coefficient ring.");
         }
-
-        const std::size_t k = std::min(n, m) / 2;
-
-        // Split a = a0 + x^k a1 ; b = b0 + x^k b1
-        Poly a0(a.begin(), a.begin() + std::min(k, n));
-        Poly a1(a.begin() + std::min(k, n), a.end());
-        Poly b0(b.begin(), b.begin() + std::min(k, m));
-        Poly b1(b.begin() + std::min(k, m), b.end());
-        trim_trailing_zeros(a0); trim_trailing_zeros(a1);
-        trim_trailing_zeros(b0); trim_trailing_zeros(b1);
-
-        // z0 = a0*b0
-        Poly z0 = karatsuba_mul_raw(a0, b0);
-        // z2 = a1*b1
-        Poly z2 = karatsuba_mul_raw(a1, b1);
-        // z1 = (a0+a1)*(b0+b1) - z0 - z2
-        Poly a0a1 = poly_add(a0, a1);
-        Poly b0b1 = poly_add(b0, b1);
-        Poly z1   = karatsuba_mul_raw(a0a1, b0b1);
-        z1 = poly_sub(z1, z0);
-        z1 = poly_sub(z1, z2);
-
-        // Combine: res = z0 + (z1 << k) + (z2 << 2k)
-        Poly res = z0;
-
-        auto ensure = [&](std::size_t sz) {
-            if (res.size() < sz) res.resize(sz, 0);
-        };
-
-        // add z1 shifted by k
-        ensure(std::max(res.size(), z1.size() + k));
-        for (std::size_t i = 0; i < z1.size(); ++i) {
-            __int128 acc = static_cast<__int128>(res[i + k]) + z1[i];
-            res[i + k] = static_cast<std::int64_t>(acc);
+        if (is_zero_coefficient(f)) {
+            return {};
         }
-
-        // add z2 shifted by 2k
-        ensure(std::max(res.size(), z2.size() + 2 * k));
-        for (std::size_t i = 0; i < z2.size(); ++i) {
-            __int128 acc = static_cast<__int128>(res[i + 2 * k]) + z2[i];
-            res[i + 2 * k] = static_cast<std::int64_t>(acc);
-        }
-
-        trim_trailing_zeros(res);
-        return res;
+        return Element::Vector{f};
     }
 
-} // namespace detail
+    throw std::invalid_argument(
+        "PolynomialRing: expected an element of this polynomial ring or its coefficient ring.");
+}
 
-// -------------------- ring primitives ------------------------
+Element PolynomialRing::from_coefficients(Element::Vector coefficients) const {
+    for (const auto& coefficient : coefficients) {
+        if (!coefficient_ring_->contains(coefficient)) {
+            throw std::invalid_argument(
+                "PolynomialRing: coefficient belongs to the wrong coefficient ring.");
+        }
+    }
+    trim(coefficients);
+    return Element(self(), std::move(coefficients));
+}
 
-Poly PolynomialsOverIntegers::zero() const { return Poly{}; }      // 0
-Poly PolynomialsOverIntegers::one()  const { return Poly{1}; }     // 1
+std::string PolynomialRing::format_coefficient(const Element& coefficient) const {
+    const std::string text = coefficient.repr();
+    return use_parentheses_ ? "(" + text + ")" : text;
+}
 
-Poly PolynomialsOverIntegers::add(const Poly& f, const Poly& g) const {
-    const std::size_t n = std::max(f.size(), g.size());
-    Poly result(n, 0);
+Element PolynomialRing::element(const Element::Vector& coefficients) const {
+    return from_coefficients(coefficients);
+}
+
+Element PolynomialRing::zero() const {
+    return Element(self(), Element::Vector{});
+}
+
+Element PolynomialRing::one() const {
+    return from_coefficients(Element::Vector{coefficient_ring_->one()});
+}
+
+Element PolynomialRing::add(const Element& f, const Element& g) const {
+    auto a = coefficients_for(f);
+    auto b = coefficients_for(g);
+
+    const std::size_t n = std::max(a.size(), b.size());
+    Element::Vector out;
+    out.reserve(n);
+
     for (std::size_t i = 0; i < n; ++i) {
-        const std::int64_t a = (i < f.size() ? f[i] : 0);
-        const std::int64_t b = (i < g.size() ? g[i] : 0);
-        result[i] = a + b;
+        Element ai = (i < a.size()) ? a[i] : coefficient_ring_->zero();
+        Element bi = (i < b.size()) ? b[i] : coefficient_ring_->zero();
+        out.push_back(coefficient_ring_->add(ai, bi));
     }
-    trim_trailing_zeros(result);
-    return result;
+
+    return from_coefficients(std::move(out));
 }
 
-Poly PolynomialsOverIntegers::neg(const Poly& f) const {
-    Poly result(f.size());
-    for (std::size_t i = 0; i < f.size(); ++i) result[i] = -f[i];
-    trim_trailing_zeros(result);
-    return result;
+Element PolynomialRing::neg(const Element& f) const {
+    auto a = coefficients_for(f);
+    Element::Vector out;
+    out.reserve(a.size());
+
+    for (const auto& coefficient : a) {
+        out.push_back(coefficient_ring_->neg(coefficient));
+    }
+
+    return from_coefficients(std::move(out));
 }
 
-// Default public multiply = naive (keeps Ring<T>::mul implemented)
-Poly PolynomialsOverIntegers::mul(const Poly& f, const Poly& g) const {
-    return detail::naive_mul_raw(f, g);
+Element PolynomialRing::mul(const Element& f, const Element& g) const {
+    auto a = coefficients_for(f);
+    auto b = coefficients_for(g);
+
+    if (a.empty() || b.empty()) {
+        return zero();
+    }
+
+    Element::Vector out(a.size() + b.size() - 1, coefficient_ring_->zero());
+
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        for (std::size_t j = 0; j < b.size(); ++j) {
+            Element product = coefficient_ring_->mul(a[i], b[j]);
+            out[i + j] = coefficient_ring_->add(out[i + j], product);
+        }
+    }
+
+    return from_coefficients(std::move(out));
 }
 
-// Explicit variants for external control (e.g., Python)
-Poly PolynomialsOverIntegers::mul_naive(const Poly& f, const Poly& g) const {
-    return detail::naive_mul_raw(f, g);
-}
+bool PolynomialRing::contains(const Element& f) const {
+    if (f.parent().get() == coefficient_ring_.get()) {
+        return coefficient_ring_->contains(f);
+    }
 
-Poly PolynomialsOverIntegers::mul_karatsuba(const Poly& f, const Poly& g) const {
-    return detail::karatsuba_mul_raw(f, g);
-}
+    if (f.parent().get() != this || !std::holds_alternative<Element::Vector>(f.data())) {
+        return false;
+    }
 
-// ---------------- equality + membership hooks ----------------
-
-bool PolynomialsOverIntegers::is_equal(const Poly& f, const Poly& g) const {
-    Poly a = f, b = g;
-    trim_trailing_zeros(a);
-    trim_trailing_zeros(b);
-    return a == b;
-}
-
-bool PolynomialsOverIntegers::contains(const Poly& /*f*/) const {
-    // Any std::vector<int64_t> is a valid element in this representation.
+    const auto& coefficients = std::get<Element::Vector>(f.data());
+    for (const auto& coefficient : coefficients) {
+        if (!coefficient_ring_->contains(coefficient)) {
+            return false;
+        }
+    }
     return true;
 }
 
-// ------------------------ pretty print -----------------------
+bool PolynomialRing::equals(const Element& f, const Element& g) const {
+    auto a = coefficients_for(f);
+    auto b = coefficients_for(g);
 
-std::string PolynomialsOverIntegers::to_string(const Poly& f) {
-    Poly p = f;
-    trim_trailing_zeros(p);
-    if (p.empty()) return "0";
+    if (a.size() != b.size()) {
+        return false;
+    }
+
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (!a[i].equals(b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string PolynomialRing::repr(const Element& f) const {
+    auto coefficients = coefficients_for(f);
+    if (coefficients.empty()) {
+        return "0";
+    }
 
     std::ostringstream out;
     bool first = true;
 
-    for (std::size_t i = 0; i < p.size(); ++i) {
-        const auto c = p[i];
-        if (c == 0) continue;
+    for (std::size_t i = 0; i < coefficients.size(); ++i) {
+        if (is_zero_coefficient(coefficients[i])) {
+            continue;
+        }
 
-        // sign
-        if (!first) out << (c > 0 ? " + " : " - ");
-        else if (c < 0) out << "-";
+        if (!first) {
+            out << " + ";
+        }
 
-        // abs coeff (skip printing 1 for non-constant terms)
-        const auto abs_c = std::llabs(c);
-        if (!(abs_c == 1 && i > 0)) out << abs_c;
-
-        // x^i
-        if (i >= 1) out << "x";
-        if (i >= 2) out << "^" << i;
+        out << format_coefficient(coefficients[i]);
+        if (i >= 1) {
+            out << " * " << variable_;
+        }
+        if (i >= 2) {
+            out << "^" << i;
+        }
 
         first = false;
     }
 
-    return out.str();
+    return first ? std::string("0") : out.str();
 }
-
-
 } // namespace primepy::algebra

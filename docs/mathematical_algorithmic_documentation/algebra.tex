@@ -1,0 +1,162 @@
+\chapter{Algebra}
+\label{sec:algebra}
+
+The algebra module is organized around two basic classes of structures:
+groups and rings. Groups provide a single operation with inverses, while rings
+combine an additive group structure with a compatible multiplication.
+
+\section{Groups}
+
+A group is a set $G$ equipped with a binary operation
+\[
+  \ast : G \times G \to G
+\]
+such that the operation is associative, has an identity element $e$, and every
+element $a \in G$ has an inverse $a^{-1}$. In PrimePie this abstract structure
+is represented by the common operations
+\[
+  \texttt{identity}, \qquad
+  \texttt{inverse}, \qquad
+  \texttt{operate}.
+\]
+
+\subsection*{Powers in a Group}
+
+For a group element $a$ and an integer $n$, the power $a^n$ means repeated use
+of the group operation:
+\[
+a^n =
+\begin{cases}
+e, & n = 0,\\
+\underbrace{a \ast a \ast \cdots \ast a}_{n \text{ times}}, & n > 0,\\
+(a^{-1})^{-n}, & n < 0.
+\end{cases}
+\]
+This definition applies to any group, not only to multiplicative groups. For an
+additive group, $a^n$ means repeated addition of $a$.
+
+The algorithm used for group powers is binary exponentiation. For positive
+$n$, it computes powers in $\mathcal{O}(\log n)$ group operations by repeatedly
+squaring:
+\[
+a^n =
+\begin{cases}
+e, & n = 0,\\
+(a^{n/2})^2, & n \text{ even},\\
+a \ast (a^{(n-1)/2})^2, & n \text{ odd}.
+\end{cases}
+\]
+
+\subsection*{Concrete Group Families}
+
+The current algebra layer includes modular additive groups, modular
+multiplicative groups of units, and direct sums of groups.
+
+\begin{itemize}
+  \item The additive group $\mathbb{Z}/n\mathbb{Z}$ uses addition modulo $n$.
+  \item The multiplicative group $(\mathbb{Z}/n\mathbb{Z})^\times$ consists of
+        residue classes coprime to $n$, with multiplication modulo $n$.
+  \item Direct sums combine several groups componentwise:
+        \[
+          (a_1,\ldots,a_k) \ast (b_1,\ldots,b_k)
+          =
+          (a_1 \ast_1 b_1,\ldots,a_k \ast_k b_k).
+        \]
+\end{itemize}
+
+\section{Rings}
+
+A ring is a set $R$ equipped with addition and multiplication. The additive
+structure is an abelian group:
+\[
+  (R,+,0),
+\]
+and multiplication is associative and distributes over addition:
+\[
+a(b+c)=ab+ac,
+\qquad
+(a+b)c=ac+bc.
+\]
+The ring structures in PrimePie expose the canonical operations
+\[
+\texttt{zero}, \qquad
+\texttt{one}, \qquad
+\texttt{add}, \qquad
+\texttt{neg}, \qquad
+\texttt{mul}.
+\]
+
+\subsection*{Additive and Multiplicative Powers}
+
+Since a ring is an additive group, it has an additive power operation inherited
+from the group structure. Thus, in a ring,
+\[
+  \texttt{power}(a,n)
+\]
+means repeated addition of $a$.
+
+Multiplicative exponentiation is a separate operation:
+\[
+  \texttt{mpower}(a,n),
+\]
+which computes
+\[
+a^n =
+\underbrace{a \cdot a \cdots a}_{n \text{ times}}
+\]
+using binary exponentiation. In a general ring this operation is defined for
+$n \ge 0$.
+
+\subsection*{The Ring of Integers \texorpdfstring{$\mathbb{Z}$}{Z}}
+
+The ring of integers is the structure
+\[
+  (\mathbb{Z}, +, \cdot, 0, 1).
+\]
+It provides the usual arithmetic operations and is also the setting for basic
+number-theoretic algorithms such as greatest common divisor and primality
+testing.
+
+\subsection*{Greatest Common Divisor}
+
+The greatest common divisor is computed using the Euclidean algorithm. For
+integers $a,b$, it is characterized by
+\[
+\gcd(a,b) = \gcd(b, a \bmod b),
+\]
+with terminal cases
+\[
+\gcd(a,0)=|a|,
+\qquad
+\gcd(0,b)=|b|,
+\qquad
+\gcd(0,0)=0.
+\]
+
+\subsection*{Primality Testing}
+
+Primality testing is based on the Miller--Rabin test. For integers in the
+64-bit range, a fixed set of bases makes the test deterministic. Small factors
+are first removed by trial division over
+\[
+\{2,3,5,7,11,13,17,19,23,29,31,37\},
+\]
+and then Miller--Rabin is run with that same set of bases. For
+$n < 2^{64}$, this set of bases is sufficient to guarantee determinism
+\cite{jaeschke1993miller, sorenson2015strong}.
+
+\subsection*{Modular Rings and Polynomial Rings}
+
+The modular ring $\mathbb{Z}/n\mathbb{Z}$ uses addition and multiplication
+modulo $n$. It is a finite ring, and when $n$ is prime it is a field.
+
+Given a coefficient ring $R$, the polynomial ring $R[X]$ consists of finite
+formal sums
+\[
+a_0 + a_1X + \cdots + a_dX^d,
+\qquad a_i \in R.
+\]
+Addition is coefficientwise, and multiplication is given by convolution:
+\[
+(fg)_k = \sum_{i+j=k} f_i g_j.
+\]

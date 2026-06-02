@@ -1,11 +1,10 @@
-\documentclass[11pt]{article}
+\documentclass[11pt]{report}
 
 % ===== Fonts that always work with TeX Live (no fontspec needed) =====
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc} % harmless under XeLaTeX too
 \usepackage{newpxtext}      % Palatino-like text
 \usepackage{newpxmath}      % matching math
-\usepackage{lmodern}            % LM family
 \renewcommand{\ttdefault}{lmtt} % LM Typewriter for code/minted
 
 % ===== Math & layout =====
@@ -22,7 +21,7 @@
   bookmarksopen=true,
   bookmarksopenlevel=2
 }
-\bookmarksetup{depth=2} % sections & subsections only
+\bookmarksetup{depth=2} % chapters, sections, and subsections
 % Strip code-ish macros in PDF strings (bookmarks/outline)
 \pdfstringdefDisableCommands{%
   \def\texttt#1{#1}%
@@ -90,7 +89,9 @@
 \newpage
 
 \input{introduction}
-\input{install}
 \input{algebra}
+
+\appendix
+\input{install}
 
 \end{document}

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <gmpxx.h>
 
 
 namespace primepy::algebra {
@@ -17,16 +18,26 @@ namespace primepy::algebra {
 //=============================
 // Additive Group mod n: ℤ/nℤ
 //=============================
-class AdditiveModGroup : public Group<int> {
+class AdditiveModGroup : public Group {
 public:
+    using Group::power;
+
     explicit AdditiveModGroup(int modulus);
 
-    int identity() const override;
-    int inverse(const int& a) const override;
-    int operate(const int& a, const int& b) const override;
+    Element element(const Integer& value) const override;
+    Element identity() const override;
+    Element inverse(const Element& a) const override;
+    Element operate(const Element& a, const Element& b) const override;
+    bool contains(const Element& a) const override;
+    bool equals(const Element& a, const Element& b) const override;
+    std::string repr(const Element& a) const override;
+    Element power(const Element& base, long long exponent) const override;
+
+    int modulus() const { return mod; }
 
 private:
     int mod;
+    int normalize(const Integer& x) const;
 };
 
 
@@ -38,17 +49,24 @@ private:
 // Multiplicative Group mod n (ℤ/nℤ)^*
 // =============================
 
-class MultiplicativeModGroup : public Group<int> {
+class MultiplicativeModGroup : public Group {
 public:
     explicit MultiplicativeModGroup (int modulus);
 
-    int identity() const override;
-    int inverse(const int& a) const override;
-    int operate(const int& a, const int& b) const override;
-    bool contains(const int& a) const ; // gcd(a, mod) == 1
+    Element element(const Integer& value) const override;
+    Element identity() const override;
+    Element inverse(const Element& a) const override;
+    Element operate(const Element& a, const Element& b) const override;
+    bool contains(const Element& a) const override; // gcd(a, mod) == 1
+    bool equals(const Element& a, const Element& b) const override;
+    std::string repr(const Element& a) const override;
+
+    int modulus() const { return mod; }
 
 private:
     int mod;
+    int normalize(const Integer& x) const;
+    bool contains_integer(const Integer& a) const;
     
 };
 
@@ -72,31 +90,36 @@ private:
 //=============================
 // Ring of integers: ℤ
 //=============================
-class Integers : public Ring<int> {
+class Integers : public Ring {
 public:
+    using Ring::power;
+    using Ring::mpower;
+
     // No parameters needed: it's just ℤ
-    Integers() = default;
+    Integers();
 
     // ----- Ring primitives -----
-    int zero() const override;                         // 0
-    int one()  const override;                         // 1
-    int add(const int& a, const int& b) const override;// a + b
-    int neg(const int& a) const override;              // -a
-    int mul(const int& a, const int& b) const override;// a * b
+    Element element(const Integer& value) const override;
+    Element zero() const override;                         // 0
+    Element one()  const override;                         // 1
+    Element add(const Element& a, const Element& b) const override;// a + b
+    Element neg(const Element& a) const override;              // -a
+    Element mul(const Element& a, const Element& b) const override;// a * b
 
     
-    bool is_equal(const int& a, const int& b) const override; // a == b
-    bool contains(const int& /*a*/) const { return true; }   // any int is in ℤ
+    bool contains(const Element& a) const override;
+    bool equals(const Element& a, const Element& b) const override;
+    std::string repr(const Element& a) const override;
 
     // gcd utility 
     static int gcd(int a, int b);
 
     // ---- Deterministic primality (bounded) ----
     // Correct for all 64-bit unsigned integers (and thus all signed 63-bit positives).
-    static bool is_prime(std::int64_t n);
+    static bool is_prime(const Integer& n);
     static bool is_prime_u64(std::uint64_t n);
     // ---- Batch primality ----
-    static std::vector<bool> is_prime_array(const std::vector<std::int64_t>& nums);
+    static std::vector<bool> is_prime_array(const std::vector<Integer>& nums);
 
 private:
     // Helpers for Miller–Rabin
@@ -114,107 +137,79 @@ private:
 //=============================
 // Ring of integers modulo n: ℤ/nℤ
 //=============================
-class IntegersModRing : public Ring<int> {
+class IntegersModRing : public Ring {
 public:
+    using Ring::power;
+    using Ring::mpower;
+
     explicit IntegersModRing(int modulus);
 
     // --------- Ring primitives ---------
-    int zero() const override;                          // 0
-    int one()  const override;                          // 1
-    int add(const int& a, const int& b) const override; // (a + b) mod n
-    int neg(const int& a) const override;               // (-a) mod n
-    int mul(const int& a, const int& b) const override; // (a * b) mod n
+    Element element(const Integer& value) const override;
+    Element zero() const override;                          // 0
+    Element one()  const override;                          // 1
+    Element add(const Element& a, const Element& b) const override; // (a + b) mod n
+    Element neg(const Element& a) const override;               // (-a) mod n
+    Element mul(const Element& a, const Element& b) const override; // (a * b) mod n
 
 
-    bool is_equal(const int& a, const int& b) const override; // a ≡ b (mod n)
-    bool contains(const int& a) const ;               // always true for ℤ/nℤ
+    bool contains(const Element& a) const override;
+    bool equals(const Element& a, const Element& b) const override;
+    std::string repr(const Element& a) const override;
 
     // --------- Utility ---------
     int modulus() const { return mod; }
 
 private:
     int mod;  // the modulus n
-    inline int normalize(int x) const {
-        int r = x % mod;
-        return r < 0 ? r + mod : r;   // ensures result in [0, mod-1]
+    inline int normalize(const Integer& x) const {
+        Integer r = x % mod;
+        if (r < 0) {
+            r += mod;
+        }
+        return r.get_si();   // result is in [0, mod-1]
     }
 };
 
 
 //=============================
-// Ring of Polynomials over Z; Z[X] in one variable
+// Polynomial ring in one variable: R[X]
 //=============================
-
-/// Polynomial over Z represented as coefficients in increasing degree order:
-/// p(x) = coeffs[0] + coeffs[1] * x + ... + coeffs[n] * x^n
-using Poly = std::vector<std::int64_t>;
-
-/// Utility: remove trailing zeros so the representation is canonical.
-inline void trim_trailing_zeros(Poly& p) {
-    while (!p.empty() && p.back() == 0) p.pop_back();
-}
-
-/// Ring of polynomials Z[x] (one variable).
-/// Elements are Poly (std::vector<int64_t>) with canonical trimming.
-class PolynomialsOverIntegers final : public Ring<Poly> {
+class PolynomialRing : public Ring {
 public:
-    PolynomialsOverIntegers() = default;
+    using Ring::power;
+    using Ring::mpower;
 
-    // ---- Ring primitives over Poly (required overrides) ----
-    Poly zero() const override;                          // 0
-    Poly one()  const override;                          // 1
+    explicit PolynomialRing(std::shared_ptr<const Ring> coefficient_ring,
+                            char variable = 'X',
+                            bool use_parentheses = true);
 
-    Poly add(const Poly& f, const Poly& g) const override; // f + g
-    Poly neg(const Poly& f) const override;                // -f
+    Element element(const Element::Vector& coefficients) const override;
+    Element zero() const override;
+    Element one() const override;
+    Element add(const Element& f, const Element& g) const override;
+    Element neg(const Element& f) const override;
+    Element mul(const Element& f, const Element& g) const override;
 
-    /// Default multiplication. Kept as the Ring<T>::mul override.
-    /// (Defined to call the naive version by default.)
-    Poly mul(const Poly& f, const Poly& g) const override; // f * g
+    bool contains(const Element& f) const override;
+    bool equals(const Element& f, const Element& g) const override;
+    std::string repr(const Element& f) const override;
 
-    // ---- Extra public API (explicit control from Python) ----
+    const std::shared_ptr<const Ring>& coefficient_ring() const { return coefficient_ring_; }
+    char variable() const { return variable_; }
 
-    /// Schoolbook multiplication (O(n*m)).
-    Poly mul_naive(const Poly& f, const Poly& g) const;
+private:
+    std::shared_ptr<const Ring> coefficient_ring_;
+    char variable_;
+    bool use_parentheses_;
 
-    /// Karatsuba multiplication (O(n^{log_2 3})) — faster for large polys.
-    Poly mul_karatsuba(const Poly& f, const Poly& g) const;
-
-    /// Subtraction convenience: f - g (implemented as add(f, neg(g))).
-    Poly sub(const Poly& f, const Poly& g) const {
-        return add(f, neg(g));
-    }
-
-    /// Degree of polynomial (−1 for the zero polynomial).
-    static int degree(const Poly& f) {
-        Poly tmp = f;
-        trim_trailing_zeros(tmp);
-        return tmp.empty() ? -1 : static_cast<int>(tmp.size()) - 1;
-    }
-
-    /// Zero check in canonical form.
-    static bool is_zero(const Poly& f) {
-        Poly tmp = f;
-        trim_trailing_zeros(tmp);
-        return tmp.empty();
-    }
-
-    /// Ensure canonical form (remove trailing zeros).
-    static void normalize(Poly& f) { trim_trailing_zeros(f); }
-
-    /// Pretty print, e.g. "3 + 2x^2 - x^5".
-    static std::string to_string(const Poly& f);
-
-    // ---- Equality hook (override if your Ring<T> exposes it) ----
-    bool is_equal(const Poly& f, const Poly& g) const override;
-
-    /// Membership check (always true for this representation).
-    bool contains(const Poly& f) const;
-
-    ///todo: find roots, decompose into prime factors.
+    static std::vector<GroupProperty> infer_properties(const std::shared_ptr<const Ring>& coefficient_ring);
+    bool is_zero_coefficient(const Element& coefficient) const;
+    void trim(Element::Vector& coefficients) const;
+    Element::Vector coefficients_for(const Element& f) const;
+    Element from_coefficients(Element::Vector coefficients) const;
+    std::string format_coefficient(const Element& coefficient) const;
 };
-
-
 
 
 } // namespace primepy::algebra
-

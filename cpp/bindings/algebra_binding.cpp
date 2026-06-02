@@ -6,6 +6,120 @@
 namespace py = pybind11;
 using namespace primepy::algebra;
 
+namespace {
+
+Integer integer_from_py(py::handle raw) {
+    if (!py::isinstance<py::int_>(raw)) {
+        throw std::invalid_argument("expected an integer.");
+    }
+    return Integer(py::str(raw).cast<std::string>());
+}
+
+py::object integer_to_py(const Integer& value) {
+    return py::module_::import("builtins").attr("int")(value.get_str());
+}
+
+py::object element_value_to_py(const Element& element) {
+    if (std::holds_alternative<Integer>(element.data())) {
+        return integer_to_py(std::get<Integer>(element.data()));
+    }
+
+    const auto& parts = std::get<Element::Vector>(element.data());
+    py::tuple out(parts.size());
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+        out[i] = element_value_to_py(parts[i]);
+    }
+    return std::move(out);
+}
+
+Element element_from_py(std::shared_ptr<const Group> group, py::handle raw) {
+    if (!group) {
+        throw std::invalid_argument("element conversion: group must be non-null.");
+    }
+
+    if (py::isinstance<Element>(raw)) {
+        Element element = raw.cast<Element>();
+        if (!group->contains(element)) {
+            throw std::invalid_argument("element conversion: element belongs to a different group.");
+        }
+        return element;
+    }
+
+    if (py::isinstance<py::int_>(raw)) {
+        Integer value = integer_from_py(raw);
+        auto polynomial_ring = std::dynamic_pointer_cast<const PolynomialRing>(group);
+        if (polynomial_ring) {
+            return polynomial_ring->coefficient_ring()->element(value);
+        }
+        return group->element(value);
+    }
+
+    if (py::isinstance<py::tuple>(raw) || py::isinstance<py::list>(raw)) {
+        auto direct_sum = std::dynamic_pointer_cast<const DirectSumGroup>(group);
+        auto polynomial_ring = std::dynamic_pointer_cast<const PolynomialRing>(group);
+
+        if (!direct_sum && !polynomial_ring) {
+            throw std::invalid_argument(
+                "element conversion: only direct sums and polynomial rings accept tuple/list elements.");
+        }
+
+        py::sequence seq = py::reinterpret_borrow<py::sequence>(raw);
+        if (direct_sum && seq.size() != static_cast<py::ssize_t>(direct_sum->arity())) {
+            throw std::invalid_argument(
+                "element conversion: expected tuple/list of length " +
+                std::to_string(direct_sum->arity()) +
+                ", got length " + std::to_string(seq.size()) + ".");
+        }
+
+        Element::Vector parts;
+        parts.reserve(static_cast<std::size_t>(seq.size()));
+
+        if (direct_sum) {
+            for (py::ssize_t i = 0; i < seq.size(); ++i) {
+                parts.push_back(element_from_py(direct_sum->factor(static_cast<std::size_t>(i)), seq[i]));
+            }
+            return direct_sum->element(parts);
+        }
+
+        for (py::ssize_t i = 0; i < seq.size(); ++i) {
+            parts.push_back(element_from_py(polynomial_ring->coefficient_ring(), seq[i]));
+        }
+        return polynomial_ring->element(parts);
+    }
+
+    throw std::invalid_argument("element conversion: expected int, tuple/list, or Element.");
+}
+
+std::vector<Element> elements_from_py_sequence(std::shared_ptr<const Group> group, py::handle raw) {
+    if (!(py::isinstance<py::tuple>(raw) || py::isinstance<py::list>(raw))) {
+        throw std::invalid_argument("expected a list/tuple of group elements.");
+    }
+
+    py::sequence seq = py::reinterpret_borrow<py::sequence>(raw);
+    std::vector<Element> out;
+    out.reserve(static_cast<std::size_t>(seq.size()));
+    for (py::ssize_t i = 0; i < seq.size(); ++i) {
+        out.push_back(element_from_py(group, seq[i]));
+    }
+    return out;
+}
+
+std::vector<Integer> integers_from_py_sequence(py::handle raw) {
+    if (!(py::isinstance<py::tuple>(raw) || py::isinstance<py::list>(raw))) {
+        throw std::invalid_argument("expected a list/tuple of integers.");
+    }
+
+    py::sequence seq = py::reinterpret_borrow<py::sequence>(raw);
+    std::vector<Integer> out;
+    out.reserve(static_cast<std::size_t>(seq.size()));
+    for (py::ssize_t i = 0; i < seq.size(); ++i) {
+        out.push_back(integer_from_py(seq[i]));
+    }
+    return out;
+}
+
+} // namespace
+
 
 
 
@@ -14,68 +128,92 @@ void bind_algebra(py::module_& m) {
 // Groups
 //=======================================================================================
 
-    py::class_<Group<int>, std::shared_ptr<Group<int>>>(m, "Group");
+    py::enum_<GroupProperty>(m, "GroupProperty")
+        .value("Finite", GroupProperty::Finite)
+        .value("Abelian", GroupProperty::Abelian)
+        .export_values();
+
+    py::class_<Element>(m, "Element")
+        .def_property_readonly("value", [](const Element& element) {
+            return element_value_to_py(element);
+        })
+        .def("__repr__", [](const Element& element) {
+            return element.repr();
+        })
+        .def("__eq__", [](const Element& a, const Element& b) {
+            return a.equals(b);
+        });
+
+    py::class_<Group, std::shared_ptr<Group>>(m, "Group")
+        .def_property_readonly("properties", &Group::properties)
+        .def("has_property", &Group::has_property, py::arg("property"))
+        .def("element", [](std::shared_ptr<Group> g, py::object raw) {
+            return element_from_py(g, raw);
+        }, py::arg("value"))
+        .def("__call__", [](std::shared_ptr<Group> g, py::object raw) {
+            return element_from_py(g, raw);
+        }, py::arg("value"))
+        .def("identity", &Group::identity)
+        .def("inverse", [](std::shared_ptr<Group> g, py::object raw) {
+            return g->inverse(element_from_py(g, raw));
+        }, py::arg("a"))
+        .def("operate", [](std::shared_ptr<Group> g, py::object a, py::object b) {
+            return g->operate(element_from_py(g, a), element_from_py(g, b));
+        }, py::arg("a"), py::arg("b"))
+        .def("contains", [](std::shared_ptr<Group> g, py::object raw) {
+            try {
+                return g->contains(element_from_py(g, raw));
+            } catch (...) {
+                return false;
+            }
+        }, py::arg("a"))
+        .def("power", [](std::shared_ptr<Group> g, py::object base, long long exp) {
+            return g->power(element_from_py(g, base), exp);
+        }, py::arg("base"), py::arg("exponent"))
+        .def("power_many", [](std::shared_ptr<Group> g, py::object bases, long long exp) {
+            return g->power(elements_from_py_sequence(g, bases), exp);
+        }, py::arg("bases"), py::arg("exponent"))
+        .def("power_many", [](std::shared_ptr<Group> g, py::object bases, const std::vector<long long>& exps) {
+            return g->power(elements_from_py_sequence(g, bases), exps);
+        }, py::arg("bases"), py::arg("exponents"));
 //=============================
 // Additive Group mod n: ℤ/nℤ
 //=============================
-    py::class_<AdditiveModGroup, Group<int>, std::shared_ptr<AdditiveModGroup>>(m, "AdditiveModGroup")
+    py::class_<AdditiveModGroup, Group, std::shared_ptr<AdditiveModGroup>>(m, "AdditiveModGroup")
         .def(py::init<int>())
-        .def("identity", &AdditiveModGroup::identity)
-        .def("inverse", &AdditiveModGroup::inverse)
-        .def("operate", &AdditiveModGroup::operate)
-        .def("power", [](const AdditiveModGroup& g, int base, int exp) {
-            return GroupUtils<int>::power(g, base, exp);
-        })
-        .def("power", [](const AdditiveModGroup& g, const std::vector<int>& bases, int exp) {
-            return GroupUtils<int>::power(g, bases, exp);
-        })
-        .def("power", [](const AdditiveModGroup& g, const std::vector<int>& bases, const std::vector<int>& exponents) {
-            return GroupUtils<int>::power(g, bases, exponents);
-        });
+        .def_property_readonly("modulus", &AdditiveModGroup::modulus);
 // =============================
 // Multiplicative Group mod n (ℤ/nℤ)^*
 // =============================
-    py::class_<MultiplicativeModGroup, Group<int>, std::shared_ptr<MultiplicativeModGroup>>(m, "MultiplicativeModGroup")
+    py::class_<MultiplicativeModGroup, Group, std::shared_ptr<MultiplicativeModGroup>>(m, "MultiplicativeModGroup")
         .def(py::init<int>(), py::arg("modulus"))
-        .def("identity", &MultiplicativeModGroup::identity)
-        .def("inverse",  &MultiplicativeModGroup::inverse)
-        .def("operate",  &MultiplicativeModGroup::operate)
-        .def("contains", &MultiplicativeModGroup::contains)
-        // Group-style power (uses the multiplicative law and inverse for negative exponents)
-        .def("power",
-            [](const MultiplicativeModGroup& g, int base, int exp) {
-                return GroupUtils<int>::power(g, base, exp);
-            },
-            py::arg("base"), py::arg("exponent"),
-            py::call_guard<py::gil_scoped_release>())
-        .def("power",
-            [](const MultiplicativeModGroup& g, const std::vector<int>& bases, int exp) {
-                return GroupUtils<int>::power(g, bases, exp);
-            },
-            py::arg("bases"), py::arg("exponent"),
-            py::call_guard<py::gil_scoped_release>())
-        .def("power",
-            [](const MultiplicativeModGroup& g, const std::vector<int>& bases, const std::vector<int>& exps) {
-                return GroupUtils<int>::power(g, bases, exps);
-            },
-            py::arg("bases"), py::arg("exponents"),
-            py::call_guard<py::gil_scoped_release>()); 
+        .def_property_readonly("modulus", &MultiplicativeModGroup::modulus);
 
 //=============================
-// Direct product factory for groups
+// Direct sum construction for groups
 //=============================
+    py::class_<DirectSumGroup, Group, std::shared_ptr<DirectSumGroup>>(m, "DirectSumGroup")
+        .def(py::init([](const std::vector<std::shared_ptr<Group>>& factors) {
+            std::vector<std::shared_ptr<const Group>> const_factors;
+            const_factors.reserve(factors.size());
+            for (const auto& factor : factors) {
+                const_factors.push_back(factor);
+            }
+            return std::make_shared<DirectSumGroup>(std::move(const_factors));
+        }), py::arg("factors"))
+        .def_property_readonly("arity", &DirectSumGroup::arity);
 
-    // Bind Group<std::pair<int,int>> so Python can hold product groups.
-    py::class_<Group<std::pair<int,int>>, std::shared_ptr<Group<std::pair<int,int>>>>(m, "GroupPair");
-
-    // Expose a free function to build direct products
-    m.def("direct_product",
-          [](std::shared_ptr<Group<int>> G1, std::shared_ptr<Group<int>> G2) {
-              // delegate to GroupUtils<int>::direct_product
-              return GroupUtils<int>::direct_product<int,int>(std::move(G1), std::move(G2));
+    m.def("direct_sum",
+          [](const std::vector<std::shared_ptr<Group>>& factors) {
+              std::vector<std::shared_ptr<const Group>> const_factors;
+              const_factors.reserve(factors.size());
+              for (const auto& factor : factors) {
+                  const_factors.push_back(factor);
+              }
+              return GroupUtils::direct_sum(std::move(const_factors));
           },
-          py::arg("G1"), py::arg("G2"),
-          "Build the direct product G1 × G2 as a new group (over pairs).");
+          py::arg("factors"),
+          "Build a direct sum of runtime groups.");
 
 
 
@@ -86,141 +224,84 @@ void bind_algebra(py::module_& m) {
 // Rings
 //=======================================================================================
 
-    // Bind the abstract Ring<int> so Python can hold references/polymorphism.
-    // (No constructor; it's abstract. Expose useful methods.)
-    py::class_<Ring<int>, Group<int>, std::shared_ptr<Ring<int>>>(m, "Ring")
-        // additive part already available via Group<int> (identity/inverse/operate)
-        .def("zero", &Ring<int>::zero)
-        .def("one",  &Ring<int>::one)
-        .def("add",  &Ring<int>::add)
-        .def("neg",  &Ring<int>::neg)
-        .def("mul",  &Ring<int>::mul)
-        .def("is_equal", &Ring<int>::is_equal)
-        // additive power for any Ring via GroupUtils ---
-        .def("power", [](const Ring<int>& r, int base, int exp) {
-                return GroupUtils<int>::power(r, base, exp);           // additive
-            }, py::arg("base"), py::arg("exponent"),
-            py::call_guard<py::gil_scoped_release>())
-        .def("power", [](const Ring<int>& r, const std::vector<int>& bases, int exp) {
-                return GroupUtils<int>::power(r, bases, exp);          // additive
-            }, py::arg("bases"), py::arg("exponent"),
-            py::call_guard<py::gil_scoped_release>())
-        .def("power", [](const Ring<int>& r, const std::vector<int>& bases, const std::vector<int>& exps) {
-                return GroupUtils<int>::power(r, bases, exps);         // additive
-            }, py::arg("bases"), py::arg("exponents"),
-            py::call_guard<py::gil_scoped_release>());
+    py::class_<Ring, Group, std::shared_ptr<Ring>>(m, "Ring")
+        .def("zero", &Ring::zero)
+        .def("one", &Ring::one)
+        .def("add", [](std::shared_ptr<Ring> r, py::object a, py::object b) {
+            return r->add(element_from_py(r, a), element_from_py(r, b));
+        }, py::arg("a"), py::arg("b"))
+        .def("neg", [](std::shared_ptr<Ring> r, py::object a) {
+            return r->neg(element_from_py(r, a));
+        }, py::arg("a"))
+        .def("mul", [](std::shared_ptr<Ring> r, py::object a, py::object b) {
+            return r->mul(element_from_py(r, a), element_from_py(r, b));
+        }, py::arg("a"), py::arg("b"))
+        .def("is_equal", [](std::shared_ptr<Ring> r, py::object a, py::object b) {
+            return r->equals(element_from_py(r, a), element_from_py(r, b));
+        }, py::arg("a"), py::arg("b"))
+        .def("mpower", [](std::shared_ptr<Ring> r, py::object base, long long exp) {
+            return r->mpower(element_from_py(r, base), exp);
+        }, py::arg("base"), py::arg("exponent"))
+        .def("mpower_many", [](std::shared_ptr<Ring> r, py::object bases, long long exp) {
+            return r->mpower(elements_from_py_sequence(r, bases), exp);
+        }, py::arg("bases"), py::arg("exponent"))
+        .def("mpower_many", [](std::shared_ptr<Ring> r, py::object bases, const std::vector<long long>& exps) {
+            return r->mpower(elements_from_py_sequence(r, bases), exps);
+        }, py::arg("bases"), py::arg("exponents"));
 
     // Ring of integers modulo n: ℤ/nℤ
-    py::class_<IntegersModRing, Ring<int>, std::shared_ptr<IntegersModRing>>(m, "IntegersModRing")
+    py::class_<IntegersModRing, Ring, std::shared_ptr<IntegersModRing>>(m, "IntegersModRing")
         .def(py::init<int>(), py::arg("modulus"))
-        // ring primitives
-        .def("zero", &IntegersModRing::zero)
-        .def("one",  &IntegersModRing::one)
-        .def("add",  &IntegersModRing::add)
-        .def("neg",  &IntegersModRing::neg)
-        .def("mul",  &IntegersModRing::mul)
-        // hooks/utilities
-        .def("is_equal", &IntegersModRing::is_equal)
-        .def("contains", &IntegersModRing::contains)
-        .def_property_readonly("modulus", &IntegersModRing::modulus)
-        // multiplicative power via RingUtils — use a distinct name to avoid clobbering additive Ring::power
-        .def("mpower", [](const IntegersModRing& R, int base, long long exp) {
-                return RingUtils<int>::power(R, base, exp);
-            }, py::arg("base"), py::arg("exponent"),
-            py::call_guard<py::gil_scoped_release>())
-        .def("mpower", [](const IntegersModRing& R, const std::vector<int>& bases, long long exp) {
-                return RingUtils<int>::power(R, bases, exp);
-            }, py::arg("bases"), py::arg("exponent"),
-            py::call_guard<py::gil_scoped_release>())
-        .def("mpower", [](const IntegersModRing& R, const std::vector<int>& bases, const std::vector<long long>& exponents) {
-                return RingUtils<int>::power(R, bases, exponents);
-            }, py::arg("bases"), py::arg("exponents"),
-            py::call_guard<py::gil_scoped_release>());
+        .def_property_readonly("modulus", &IntegersModRing::modulus);
+
+    // Polynomial ring in one variable: R[X]
+    py::class_<PolynomialRing, Ring, std::shared_ptr<PolynomialRing>>(m, "PolynomialRing")
+        .def(py::init([](std::shared_ptr<Ring> coefficient_ring,
+                         const std::string& variable,
+                         bool use_parentheses) {
+            if (variable.size() != 1) {
+                throw std::invalid_argument("PolynomialRing: variable must be exactly one character.");
+            }
+            return std::make_shared<PolynomialRing>(
+                std::static_pointer_cast<const Ring>(coefficient_ring),
+                variable[0],
+                use_parentheses
+            );
+        }),
+        py::arg("coefficient_ring"),
+        py::arg("variable") = "X",
+        py::arg("use_parentheses") = true)
+        .def_property_readonly("variable", [](const PolynomialRing& ring) {
+            return std::string(1, ring.variable());
+        });
         
             
 //#####################################
 // Ring of integers: ℤ  
 //#####################################
-    py::class_<Integers, Ring<int>, std::shared_ptr<Integers>>(m, "Integers")
+    py::class_<Integers, Ring, std::shared_ptr<Integers>>(m, "Integers")
         .def(py::init<>())  // trivial ctor
-
-        // ring primitives
-        .def("zero", &Integers::zero)
-        .def("one",  &Integers::one)
-        .def("add",  &Integers::add)
-        .def("neg",  &Integers::neg)
-        .def("mul",  &Integers::mul)
-
-        // utilities/hooks
-        .def("is_equal", &Integers::is_equal)
-        .def("contains", &Integers::contains)
-
         // static helpers
         .def_static("gcd", &Integers::gcd, py::arg("a"), py::arg("b"))
 
         // deterministic primality (scalar + batch)
         .def_static("is_prime",
-            &Integers::is_prime,
-            py::arg("n"),
-            py::call_guard<py::gil_scoped_release>())
+            [](py::object n) {
+                Integer value = integer_from_py(n);
+                py::gil_scoped_release release;
+                return Integers::is_prime(value);
+            },
+            py::arg("n"))
         .def_static("is_prime_u64",
             &Integers::is_prime_u64,
             py::arg("n"),
             py::call_guard<py::gil_scoped_release>())
         .def_static("is_prime_array",
-            &Integers::is_prime_array,
-            py::arg("numbers"),
-            py::call_guard<py::gil_scoped_release>());
-
-
-
-//#####################################
-// Ring of Polinomials over Z : ℤ[X] 
-//#####################################
-
-    py::class_<PolynomialsOverIntegers>(m, "PolynomialsOverIntegers")
-        .def(py::init<>())
-
-        // Ring primitives
-        .def("zero", &PolynomialsOverIntegers::zero,
-             "Return the zero polynomial [] (canonical empty form).")
-        .def("one",  &PolynomialsOverIntegers::one,
-             "Return the constant one polynomial [1].")
-
-        // Additive ops
-        .def("add", &PolynomialsOverIntegers::add, py::arg("f"), py::arg("g"),
-             "f + g (coefficient-wise over Z).")
-        .def("neg", &PolynomialsOverIntegers::neg, py::arg("f"),
-             "-f")
-        .def("sub", &PolynomialsOverIntegers::sub, py::arg("f"), py::arg("g"),
-             "f - g")
-
-        // Multiplication
-        .def("mul", &PolynomialsOverIntegers::mul, py::arg("f"), py::arg("g"),
-             "f * g using the class's default algorithm (currently naive).")
-        .def("mul_naive", &PolynomialsOverIntegers::mul_naive, py::arg("f"), py::arg("g"),
-             "f * g using schoolbook O(n*m).")
-        .def("mul_karatsuba", &PolynomialsOverIntegers::mul_karatsuba, py::arg("f"), py::arg("g"),
-             "f * g using Karatsuba (faster for larger degree).")
-
-        // Equality / membership
-        .def("is_equal",   &PolynomialsOverIntegers::is_equal,   py::arg("f"), py::arg("g"),
-             "Compare canonical forms (after trimming).")
-        .def("contains",   &PolynomialsOverIntegers::contains,   py::arg("f"),
-             "Return True (any list[int] is valid).")
-
-        // Static helpers
-        .def_static("degree",     &PolynomialsOverIntegers::degree,     py::arg("f"),
-             "Degree of f, or -1 for the zero polynomial.")
-        .def_static("is_zero",    &PolynomialsOverIntegers::is_zero,    py::arg("f"),
-             "Whether f is the zero polynomial (after trimming).")
-        // expose a copy-normalizing helper because C++ normalize(Poly&) mutates:
-        .def_static("normalized",
-            [](Poly f){ PolynomialsOverIntegers::normalize(f); return f; }, py::arg("f"),
-            "Return a trimmed (canonical) copy of f.")
-        .def_static("to_string",  &PolynomialsOverIntegers::to_string,  py::arg("f"),
-             "Pretty print like '3 + 2x^2 - x^5'.");
-
-
+            [](py::object numbers) {
+                auto nums = integers_from_py_sequence(numbers);
+                py::gil_scoped_release release;
+                return Integers::is_prime_array(nums);
+            },
+            py::arg("numbers"));
 
     }

@@ -1,7 +1,16 @@
 from .number_theory import primes, nth_prime, first_primes, primes_table_size
-from .algebra.algebraic_structures import AdditiveModGroup, IntegersModRing, Integers
+from .algebra.algebraic_structures import (
+    AdditiveModGroup,
+    GroupProperty,
+    MultiplicativeModGroup,
+    DirectSumGroup,
+    IntegersModRing,
+    Integers,
+    PolynomialRing,
+)
 
 __all__ = [
     "primes", "nth_prime", "first_primes", "primes_table_size",
-    "AdditiveModGroup", "IntegersModRing", "Integers",
+    "AdditiveModGroup", "GroupProperty", "MultiplicativeModGroup", "DirectSumGroup",
+    "IntegersModRing", "Integers", "PolynomialRing",
 ]

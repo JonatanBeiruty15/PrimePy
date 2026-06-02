@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "primepie"
+version = "0.1.0"
+description = "A number theory library with C++ backend and Python interface"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+license = "MIT"
+authors = [
+    { name = "JB15", email = "BlahBlah@Harta.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/JonatanBeiruty15/PrimePy"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["primepie*"]

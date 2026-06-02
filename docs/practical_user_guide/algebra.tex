@@ -1,166 +1,146 @@
-\section{Algebra}
-This section introduces the core abstract algebraic structures supported by the \texttt{PrimePie} library. We provide concrete examples of their implementations within the library.
+\chapter{Algebra}
 
-The main structures currently supported are:
+The algebra module is organized around two kinds of structures:
 \begin{enumerate}
   \item \textbf{Groups}
   \item \textbf{Rings}
 \end{enumerate}
 
-\subsection{Additive Group Modulo \texorpdfstring{$n$}{n} (\texorpdfstring{$\mathbb{Z}\,\text{/}\,n\mathbb{Z}$}{Z/nZ})}
+Most algebra operations accept plain Python integers as inputs when this is
+unambiguous, but they return \texttt{Element} objects. An element remembers the
+group or ring it belongs to, prints in algebraic notation, and exposes its raw
+Python value through \texttt{.value}.
 
-The Python API exposes a thin, Pythonic wrapper over the C++ implementation.
-Instantiate the additive group modulo $n$ and use the unified \texttt{power} method, which dispatches by argument shapes:
-\begin{itemize}
-  \item \texttt{power(int base, int exponent) -> int}
-  \item \texttt{power(Iterable[int] bases, int exponent) -> list[int]}
-  \item \texttt{power(Iterable[int] bases, Iterable[int] exponents) -> list[int]}
-\end{itemize}
+For integer-valued elements, the C++ backend uses GMP's
+\texttt{mpz\_class}. This means that algebraic elements are represented with
+arbitrary-precision integers rather than fixed-width \texttt{int64\_t}
+arithmetic.
 
-\paragraph{Example (basic usage).}
 \begin{pybox}
-from primepie.algebra.algebraic_structures import AdditiveModGroup
+from primepie.algebra import AdditiveModGroup
 
-G = AdditiveModGroup(7)          # the additive group (Z/7Z, +)
+G = AdditiveModGroup(7)
+a = G(10)
 
-print(G.identity())              # 0
-print(G.inverse(3))              # 4   (since 3+4 == 0 mod 7)
-print(G.operate(3, 6))           # 2   (3+6 == 2 mod 7)
-
-# unified power (additive repeated operation)
-print(G.power(2, 3))             # 6   (2+2+2 == 6 mod 7)
-print(G.power([1,2,3], 2))       # [2, 4, 6]
-print(G.power([1,2,3], [0,1,2])) # [0, 2, 6]
+print(a)        # 3 mod 7
+print(a.value)  # 3
 \end{pybox}
 
-\paragraph{Notes.}
-\begin{itemize}
-  \item The group law is addition mod $n$, so \texttt{power(b, k)} means adding \texttt{b} to itself \texttt{k} times (with negative exponents handled via the additive inverse).
-  \item All results are reduced into $[0, n-1]$.
-\end{itemize}
+\section{Groups}
 
-\subsection[Ring of Integers Modulo n (Z/nZ)]%
-{Ring of Integers Modulo $\ensuremath{n}$ \; (\ensuremath{\mathbb{Z}\,\text{/}\,n\mathbb{Z}})}
+A group provides an identity element, inverses, a binary operation, and
+exponentiation by repeated use of the group operation. In an additive group,
+\texttt{power(a, n)} means adding \texttt{a} to itself \texttt{n} times.
 
-The ring wrapper exposes both:
-\begin{itemize}
-  \item The \textbf{additive group interface} (\texttt{identity}, \texttt{inverse}, \texttt{operate}, and additive \texttt{power}).
-  \item The \textbf{ring primitives} (\texttt{zero}, \texttt{one}, \texttt{add}, \texttt{neg}, \texttt{mul}, \texttt{is\_equal}, \texttt{contains}).
-  \item A separate multiplicative power method, called \texttt{mpower}, which performs repeated multiplication under modulo $n$.
-\end{itemize}
-
-\paragraph{Example (basic usage).}
+\paragraph{Additive groups modulo n.}
 \begin{pybox}
-from primepie.algebra.algebraic_structures import IntegersModRing
+from primepie.algebra import AdditiveModGroup
 
-R = IntegersModRing(7)           # the ring Z/7Z
+G = AdditiveModGroup(7)
 
-print(R.zero(), R.one())         # 0 1
-print(R.add(5, 6))               # 4   (11 == 4)
-print(R.neg(3))                  # 4   (-3 == 4)
-print(R.mul(3, 5))               # 1   (15 == 1)
-print(R.is_equal(10, 3))         # True
-
-# additive interface inherited from Group
-print(R.identity())              # 0
-print(R.inverse(3))              # 4
-print(R.operate(3, 6))           # 2
-print(R.power(2, 3))             # 6   (2+2+2 == 6)
-
-# multiplicative power via mpower
-print(R.mpower(3, 0))            # 1
-print(R.mpower(3, 4))            # 4   (3**4 = 81 == 4)
-print(R.mpower([1,2,3,6], 3))    # [1, 1, 6, 6]
-print(R.mpower([2,3,4,5],[0,1,2,3]))  # [1, 3, 2, 6]
+print(G.identity())       # 0 mod 7
+print(G.inverse(3))       # 4 mod 7
+print(G.operate(3, 6))    # 2 mod 7
+print(G.power(2, 3))      # 6 mod 7
 \end{pybox}
 
-\paragraph{Notes.}
-\begin{itemize}
-  \item \textbf{Additive vs. Multiplicative Power.}
-  \begin{itemize}
-    \item \texttt{power} uses the additive group structure: $a^k = a + \cdots + a$ ($k$ times).
-    \item \texttt{mpower} uses the multiplicative structure: $a^k = a \cdot \cdots \cdot a$ ($k$ times).
-  \end{itemize}
-  \item \textbf{Negative Exponents.}
-    Additive powers accept negative exponents (using inverses). Multiplicative powers do not (unless the structure is a field, to be added in future versions).
-  \item \textbf{Zero Ring ($n=1$).} In $\mathbb{Z}\,\text{/}\,1\mathbb{Z}$ we have $0=1$, so both \texttt{zero()} and \texttt{one()} return $0$, and every product and sum is $0$.
-\end{itemize}
-
-\subsection{Primality testing in Python}
-
-PrimePie exposes deterministic primality tests through the ring of integers
-\verb|Integers|. For convenience, you can test a single integer or a whole batch.
-
-\paragraph{Single values.}
+\paragraph{Batch exponentiation.}
 \begin{pybox}
-from primepie.algebra.algebraic_structures import Integers
+G = AdditiveModGroup(7)
 
-print(Integers.is_prime(97))              # True
-print(Integers.is_prime(10007))           # True
-print(Integers.is_prime(10008))           # False
+same_exponent = G.power([1, 2, 3], 4)
+different_exponents = G.power([1, 2, 3], [0, 1, 2])
 
-# Edge cases
-print(Integers.is_prime(1))               # False
-print(Integers.is_prime(0))               # False
-print(Integers.is_prime(-11))             # False
-
-# Large (still within 64-bit range):
-print(Integers.is_prime(2305843009213693951))  # True (2^61 - 1)
+print([x.value for x in same_exponent])       # [4, 1, 5]
+print([x.value for x in different_exponents]) # [0, 2, 6]
 \end{pybox}
 
-\paragraph{Batch mode.}
-Pass a list of integers and get back a list of booleans. This uses the same
-deterministic test internally, and can run in parallel when PrimePie is built
-with OpenMP.
+\paragraph{Multiplicative groups modulo n.}
+The multiplicative group modulo $n$ contains only the invertible residue classes,
+that is, elements coprime to $n$.
 \begin{pybox}
-nums = [2, 4, 5, 9, 1, 97, 1_000_000_007, 0, -11, 10007]
-flags = Integers.is_prime(nums)
-print(flags)   # [True, False, True, False, False, True, True, False, False, True]
+from primepie.algebra import MultiplicativeModGroup
+
+U = MultiplicativeModGroup(7)
+
+print(U.identity())       # 1 mod 7
+print(U.inverse(3))       # 5 mod 7
+print(U.operate(3, 5))    # 1 mod 7
+print(U.power(3, 4))      # 4 mod 7
 \end{pybox}
 
-\paragraph{Filtering lists.}
+\paragraph{Direct sums of groups.}
 \begin{pybox}
-data = list(range(90, 110))
-is_p  = Integers.is_prime(data)
-primes_only = [x for x, ok in zip(data, is_p) if ok]
-print(primes_only)  # [97, 101, 103, 107, 109]
+from primepie.algebra import AdditiveModGroup, DirectSumGroup
+
+Z5 = AdditiveModGroup(5)
+Z7 = AdditiveModGroup(7)
+G = DirectSumGroup([Z5, Z7])
+
+a = G((2, 3))
+b = G((4, 6))
+
+print(a)                # (2 mod 5, 3 mod 7)
+print(G.operate(a, b))  # (1 mod 5, 2 mod 7)
+print(G.power(a, 3))    # (1 mod 5, 2 mod 7)
 \end{pybox}
 
-\paragraph{Using the precomputed prime table.}
-If you need fast access to small/medium primes by index, use the number theory API:
+\section{Rings}
+
+A ring in PrimePie is also used as an additive group. This means
+\texttt{power(a, n)} is additive power, while \texttt{mpower(a, n)} is
+multiplicative power.
+
+\paragraph{Rings modulo n.}
 \begin{pybox}
-from primepie.number_theory import Primes, nth_prime, first_primes, primes_table_size
+from primepie.algebra import IntegersModRing
 
-print(primes_table_size())       # e.g., 100000 (depends on build)
-print(nth_prime(1), nth_prime(10))   # 2, 29
-print(first_primes(10))              # [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+R = IntegersModRing(7)
 
-# Batch by indices (order preserved)
-print(nth_prime([2, 4, 3, 10, 6]))   # [3, 7, 5, 29, 13]
-
-# Slice-like access (1-based): Primes[1] == 2, Primes[1:6] -> [2,3,5,7,11]
-print(Primes[1], Primes[1:6])
+print(R.zero())          # 0 mod 7
+print(R.one())           # 1 mod 7
+print(R.add(5, 6))       # 4 mod 7
+print(R.mul(3, 5))       # 1 mod 7
+print(R.is_equal(10, 3)) # True
 \end{pybox}
 
-\paragraph{Performance tips.}
-\begin{itemize}
-  \item Use \verb|Integers.is_prime| for arbitrary integers within 64-bit range; it’s deterministic.
-  \item Use \verb|Integers.is_prime([...])| for large batches; it parallelizes when OpenMP is enabled.
-  \item Use \verb|nth_prime|/\verb|first_primes|/\verb|primes[...]| when you need many \emph{small} primes quickly by index; these read from the precomputed binary table without loading everything into RAM.
-\end{itemize}
-
-\paragraph{Error handling.}
+\paragraph{Additive and multiplicative power.}
 \begin{pybox}
-# Integers.is_prime expects int or iterable of ints.
-try:
-    Integers.is_prime("13")   # wrong type
-except TypeError:
-    print("TypeError as expected")
+R = IntegersModRing(7)
 
-# The prime table uses 1-based indices:
-from primepie.number_theory import nth_prime
-try:
-    nth_prime(0)
-except ValueError:
-    print("ValueError as expected (1-based indexing)")
+print(R.power(2, 3))     # 6 mod 7, additive: 2 + 2 + 2
+print(R.mpower(3, 4))    # 4 mod 7, multiplicative: 3^4
+
+out = R.mpower([1, 2, 3, 6], 3)
+print([x.value for x in out])  # [1, 1, 6, 6]
+\end{pybox}
+
+\paragraph{The ring of integers.}
+\begin{pybox}
+from primepie.algebra import Integers
+
+Z = Integers()
+
+print(Z.add(5, 6))              # 11
+print(Z.mul(5, 6))              # 30
+print(Integers.gcd(84, 30))     # 6
+print(Integers.is_prime(97))    # True
+print(Integers.is_prime([2, 4, 5, 9]))
+# [True, False, True, False]
+\end{pybox}
+
+\paragraph{Polynomial rings.}
+\begin{pybox}
+from primepie.algebra import IntegersModRing, PolynomialRing
+
+R = IntegersModRing(5)
+P = PolynomialRing(R)
+
+f = P([1, 2])   # 1 + 2X
+g = P([4, 1])   # 4 + X
+
+print(f)            # (1 mod 5) + (2 mod 5) * X
+print(P.add(f, g))  # (3 mod 5) * X
+print(P.mul(f, g))  # (4 mod 5) + (4 mod 5) * X + (2 mod 5) * X^2
+print(P.add(f, 3))  # (4 mod 5) + (2 mod 5) * X
 \end{pybox}

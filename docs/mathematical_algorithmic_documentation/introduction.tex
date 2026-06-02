@@ -1,4 +1,4 @@
-\section{Introduction}
+\chapter{Introduction}
 
 \texttt{PrimePie} is a Python number theory library with C++ backend, designed for high-performance computation and symbolic experimentation.
 
@@ -17,15 +17,15 @@ The ie project is guided by the following Philosophy:
 \end{itemize}
 
 
-\subsection{Philosophy}
+\section{Philosophy}
 
 \texttt{PrimePie} is designed with several principles in mind:
 
-\paragraph{1. Data Types — Precision VS. Approximation}  
+\paragraph{1. Data Types -- Precision VS. Approximation}
 \textcolor{red}{TODO}
 
 
-\paragraph{2. Parallel Computation — Scalar Logic, Vector Execution}  
+\paragraph{2. Parallel Computation -- Scalar Logic, Vector Execution}
 All scalar operations in the library are automatically extended to \textbf{vectorized operations}, allowing users to apply the same logic to entire collections of values with minimal effort.
 
 For example, consider the method \texttt{.power(a, n)} which computes $a^n$:
@@ -38,4 +38,3 @@ For example, consider the method \texttt{.power(a, n)} which computes $a^n$:
     \texttt{power(}[a_1, \dots, a_k], [n_1, \dots, n_k]\texttt{)} \rightarrow [a_1^{n_1}, \dots, a_k^{n_k}]
   \]
 \end{itemize}
-

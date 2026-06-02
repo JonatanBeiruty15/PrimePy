@@ -86,6 +86,31 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Debug)  # enable debug symbols by default
 
 # ============================================
+# Parallelization
+# ============================================
+option(PRIMEPY_ENABLE_OPENMP "Build PrimePy C++ loops with OpenMP" ON)
+
+if(PRIMEPY_ENABLE_OPENMP)
+    if(APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
+        foreach(openmp_prefix /opt/homebrew/opt/libomp /usr/local/opt/libomp)
+            if(EXISTS "${openmp_prefix}")
+                list(APPEND CMAKE_PREFIX_PATH "${openmp_prefix}")
+            endif()
+        endforeach()
+    endif()
+
+    find_package(OpenMP REQUIRED COMPONENTS CXX)
+endif()
+
+find_path(GMP_INCLUDE_DIR gmp.h REQUIRED)
+find_library(GMP_LIBRARY gmp REQUIRED)
+find_library(GMPXX_LIBRARY gmpxx REQUIRED)
+
+add_library(primepy_gmp INTERFACE)
+target_include_directories(primepy_gmp INTERFACE ${GMP_INCLUDE_DIR})
+target_link_libraries(primepy_gmp INTERFACE ${GMPXX_LIBRARY} ${GMP_LIBRARY})
+
+# ============================================
 # External libraries
 # ============================================
 set(PYBIND11_DIR ${CMAKE_SOURCE_DIR}/external/pybind11)
@@ -101,6 +126,10 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 file(GLOB_RECURSE CORE_SOURCES src/*.cpp)
 add_library(primepy_core STATIC ${CORE_SOURCES})
 target_include_directories(primepy_core PUBLIC include)
+if(PRIMEPY_ENABLE_OPENMP)
+    target_link_libraries(primepy_core PUBLIC OpenMP::OpenMP_CXX)
+endif()
+target_link_libraries(primepy_core PUBLIC primepy_gmp)
 
 # ============================================
 # Utility Generators (precomputed data files)
@@ -163,6 +192,10 @@ file(GLOB_RECURSE BINDING_SOURCES bindings/*.cpp)
 if (BINDING_SOURCES)
     pybind11_add_module(_core MODULE ${BINDING_SOURCES})
     target_link_libraries(_core PRIVATE primepy_core)
+    if(PRIMEPY_ENABLE_OPENMP)
+        target_link_libraries(_core PRIVATE OpenMP::OpenMP_CXX)
+    endif()
+    target_link_libraries(_core PRIVATE primepy_gmp)
 
     # symbols are guaranteed to be in the .so
     target_sources(_core PRIVATE ${CORE_SOURCES})

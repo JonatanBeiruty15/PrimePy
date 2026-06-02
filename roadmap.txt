@@ -1,0 +1,127 @@
+PrimePie Roadmap: Stage 0
+=========================
+
+Goal
+----
+The goal of stage 0 is to build the basic mathematical infrastructure needed
+for later algebraic number theory and analytic number theory features.
+
+This stage should stay small and reliable. It should not yet try to implement
+full Galois theory, general number fields, ideals, class groups, or advanced
+L-function algorithms.
+
+
+Algebraic Number Theory
+-----------------------
+
+Stage 0 goal:
+Build the algebraic foundations needed for later computational Galois theory.
+
+Essential features:
+
+1. Fields
+   - Rational field Q
+   - Prime finite fields F_p
+   - Basic field interface: zero, one, add, neg, mul, inverse, division
+
+2. Polynomial Rings over Fields
+   - Polynomials over Q
+   - Polynomials over F_p
+   - Addition, subtraction, multiplication
+   - Division with remainder
+   - Polynomial gcd
+   - Formal derivative
+
+3. Polynomial Arithmetic Tools
+   - Squarefree test
+   - Squarefree factorization
+   - Irreducibility tests for small/basic cases
+   - Factorization over finite fields F_p
+
+4. Modular Reduction of Polynomials
+   - Reduce integer/rational polynomials modulo p
+   - Factor a polynomial modulo p
+   - Record factorization patterns by degrees
+
+5. Basic Permutations
+   - Represent permutations in S_n
+   - Cycle decomposition
+   - Cycle type
+   - Sign of a permutation
+   - Small generated permutation groups
+
+Stage 0 stopping point:
+Given a polynomial f in Q[x], PrimePie should be able to reduce f modulo good
+primes p, factor it over F_p, and read off the corresponding cycle types.
+
+This is enough to prepare for basic Galois theory later, but it is not yet full
+Galois group computation.
+
+
+Analytic Number Theory
+----------------------
+
+Stage 0 goal:
+Build basic arithmetic-function and Dirichlet-series tools needed for later
+zeta and L-function experiments.
+
+Essential features:
+
+1. Arithmetic Functions
+   - Euler phi function phi(n)
+   - Mobius function mu(n)
+   - Divisor-counting function d(n)
+   - Divisor-sum function sigma(n)
+   - Von Mangoldt function Lambda(n)
+   - Liouville function lambda(n)
+
+2. Prime and Factorization Support
+   - Prime table access
+   - Prime counting for computed ranges
+   - Integer factorization for moderate-size integers
+   - Use factorizations to compute arithmetic functions
+
+3. Dirichlet Convolution
+   - Arithmetic functions as finite sequences
+   - Dirichlet convolution
+   - Identity function
+   - Mobius inversion for finite ranges
+
+4. Basic Summatory Functions
+   - Sum of f(n) for n <= x
+   - Summatory Mobius function M(x)
+   - Summatory divisor functions
+   - Chebyshev functions theta(x) and psi(x)
+
+5. First Zeta and L-function Experiments
+   - Partial sums for zeta(s)
+   - Euler product approximation for zeta(s), for Re(s) > 1
+   - Basic Dirichlet characters modulo q
+   - Partial sums for L(s, chi)
+   - Euler product approximation for L(s, chi), for Re(s) > 1
+
+Stage 0 stopping point:
+PrimePie should be able to compute arithmetic functions over ranges, form basic
+Dirichlet convolutions, and numerically approximate zeta(s) and simple
+Dirichlet L-functions using partial sums and Euler products.
+
+This is enough for first analytic number theory experiments, but it is not yet
+a complete numerical L-function library.
+
+
+Later Stages
+------------
+
+Later algebraic number theory:
+- Number fields Q(alpha)
+- Minimal polynomials
+- Discriminants
+- Basic Galois group classifiers
+- Ideals and prime splitting
+
+Later analytic number theory:
+- Faster summatory algorithms
+- Better zeta evaluation
+- Primitive Dirichlet characters
+- Functional equations
+- Zero-finding experiments

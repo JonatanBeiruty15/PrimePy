@@ -7,8 +7,13 @@ Backed by the C++ core (_core.tools).
 """
 
 from __future__ import annotations
+from pathlib import Path
 from typing import Iterable, Iterator, List, overload, Sequence, Union, overload
 from ..core import _core
+
+_DEFAULT_PRIMES_FILE = Path(__file__).resolve().parents[1] / "data" / "primes_u32_le.bin"
+if _DEFAULT_PRIMES_FILE.exists():
+    _core.tools.set_primes_file(str(_DEFAULT_PRIMES_FILE))
 
 # ---------------------------
 # Low-level wrappers

@@ -1,0 +1,14 @@
+-r requirements.txt
+
+# Test runner
+pytest>=8.0
+
+# Python packaging and upload tools
+build>=1.3
+twine>=6.0
+setuptools>=68
+wheel
+
+# Native build tools for the C++ extension
+cmake>=3.15
+ninja

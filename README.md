@@ -47,7 +47,11 @@ PrimePy/
 │   ├── practical_user_guide/  # Practical guide (PDF here)
 │   └── figures/               # Images used by the docs
 │
-├── requirements.txt           # Python dependencies
+├── requirements.txt           # Runtime Python dependencies
+├── requirements-dev.txt       # Development/testing/build dependencies
 ├── pyproject.toml             # Python packaging config (build metadata)
+├── setup.py                   # Minimal setuptools entry point
+├── pytest.ini                 # Pytest configuration
+├── LICENSE                    # License file
 └── README.md                  # You are here
-
+```

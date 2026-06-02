@@ -9,8 +9,11 @@ Python-side wrappers for algebraic structures:
 backed by C++ classes in `_core.algebra`.
 """
 
-from typing import List, Sequence, Union, overload, Literal, Iterable, Optional
+from typing import List, Sequence, Union, overload
 from ..core import _core
+
+Element = _core.algebra.Element
+GroupProperty = _core.algebra.GroupProperty
 
 
 # ==================================================================================================
@@ -22,6 +25,19 @@ class Group:
     def __init__(self, backend):
         self._backend = backend
 
+    def __call__(self, value):
+        return self.element(value)
+
+    def element(self, value):
+        return self._backend.element(value)
+
+    @property
+    def properties(self):
+        return list(self._backend.properties)
+
+    def has_property(self, property_):
+        return self._backend.has_property(property_)
+
     def identity(self):
         return self._backend.identity()
 
@@ -31,8 +47,28 @@ class Group:
     def operate(self, a, b):
         return self._backend.operate(a, b)
 
+    def contains(self, a):
+        return self._backend.contains(a)
+
     def power(self, base, exponent):
-        return self._backend.power(base, exponent)
+        if isinstance(base, (list, tuple)) and not isinstance(base, Element):
+            if isinstance(exponent, int):
+                if hasattr(self._backend, "power_many"):
+                    return self._backend.power_many(list(base), int(exponent))
+                return self._backend.power(list(base), int(exponent))
+            if hasattr(self._backend, "power_many"):
+                return self._backend.power_many(list(base), [int(e) for e in exponent])
+            return self._backend.power(list(base), [int(e) for e in exponent])
+        return self._backend.power(base, int(exponent))
+
+    def power_many(self, bases, exponent):
+        if isinstance(exponent, int):
+            if hasattr(self._backend, "power_many"):
+                return self._backend.power_many(list(bases), int(exponent))
+            return self._backend.power(list(bases), int(exponent))
+        if hasattr(self._backend, "power_many"):
+            return self._backend.power_many(list(bases), [int(e) for e in exponent])
+        return self._backend.power(list(bases), [int(e) for e in exponent])
 
 
 # ========================================
@@ -43,40 +79,36 @@ class AdditiveModGroup(Group):
         cpp_instance = _core.algebra.AdditiveModGroup(modulus)
         super().__init__(cpp_instance)
 
-    # --- private helpers ---
-    def _power_scalar(self, base: int, exponent: int):
-        return self._backend.power(int(base), int(exponent))
+    @property
+    def modulus(self) -> int:
+        return self._backend.modulus
 
-    def _power_batch(self, bases, exponent: int):
-        return self._backend.power(list(bases), int(exponent))
 
-    def _power_elementwise(self, bases, exponents):
-        return self._backend.power(list(bases), [int(e) for e in exponents])
+class MultiplicativeModGroup(Group):
+    def __init__(self, modulus):
+        cpp_instance = _core.algebra.MultiplicativeModGroup(modulus)
+        super().__init__(cpp_instance)
 
-    # --- single public entrypoint ---
-    def power(self, base_or_bases, exponent_or_exponents):
-        """
-        Unified power:
-          - power(int base, int exponent) -> int
-          - power(Iterable[int] bases, int exponent) -> list[int]
-          - power(Iterable[int] bases, Iterable[int] exponents) -> list[int]
-        """
-        b = base_or_bases
-        e = exponent_or_exponents
+    @property
+    def modulus(self) -> int:
+        return self._backend.modulus
 
-        # scalar: int,int
-        if isinstance(b, int) and isinstance(e, int):
-            return self._power_scalar(b, e)
+    def contains(self, a) -> bool:
+        return self._backend.contains(a)
 
-        # batch same exponent: iterable of ints, int
-        if not isinstance(b, int) and isinstance(e, int):
-            return self._power_batch(b, e)
 
-        # element-wise: iterable, iterable (must be same length; backend checks too)
-        if not isinstance(b, int) and not isinstance(e, int):
-            return self._power_elementwise(b, e)
+class DirectSumGroup(Group):
+    def __init__(self, groups):
+        self.groups = list(groups)
+        cpp_instance = _core.algebra.DirectSumGroup([g._backend for g in self.groups])
+        super().__init__(cpp_instance)
 
-        raise TypeError("power expects (int,int), (Iterable[int],int), or (Iterable[int],Iterable[int]).")
+    @property
+    def arity(self) -> int:
+        return self._backend.arity
+
+    def power(self, base, exponent):
+        return self._backend.power(base, int(exponent))
     
 
 
@@ -111,6 +143,17 @@ class Ring(Group):
     # equality hook
     def is_equal(self, a, b):
         return self._backend.is_equal(a, b)
+
+    def mpower(self, base, exponent):
+        if isinstance(base, (list, tuple)) and not isinstance(base, Element):
+            if isinstance(exponent, int):
+                if hasattr(self._backend, "mpower_many"):
+                    return self._backend.mpower_many(list(base), int(exponent))
+                return self._backend.mpower(list(base), int(exponent))
+            if hasattr(self._backend, "mpower_many"):
+                return self._backend.mpower_many(list(base), [int(e) for e in exponent])
+            return self._backend.mpower(list(base), [int(e) for e in exponent])
+        return self._backend.mpower(base, int(exponent))
 
 
 
@@ -152,9 +195,9 @@ class Integers(Ring):
         if isinstance(b, int) and isinstance(e, int):
             return self._backend.power(int(b), int(e))
         if not isinstance(b, int) and isinstance(e, int):
-            return self._backend.power(list(b), int(e))
+            return self._backend.power_many(list(b), int(e))
         if not isinstance(b, int) and not isinstance(e, int):
-            return self._backend.power(list(b), [int(x) for x in e])
+            return self._backend.power_many(list(b), [int(x) for x in e])
         raise TypeError("power expects (int,int), (Iterable[int],int), or (Iterable[int],Iterable[int]).")
 
     # ---------- static helpers ----------
@@ -199,183 +242,36 @@ class IntegersModRing(Ring):
     def modulus(self) -> int:
         return self._backend.modulus
 
-    # --- multiplicative helpers (call backend .mpower) ---
-    def _mpower_scalar(self, base: int, exponent: int):
-        return self._backend.mpower(int(base), int(exponent))
 
-    def _mpower_batch(self, bases, exponent: int):
-        return self._backend.mpower(list(bases), int(exponent))
+class PolynomialRing(Ring):
+    def __init__(self, coefficient_ring: Ring, variable: str = "X", use_parentheses: bool = True):
+        if not hasattr(coefficient_ring, "_backend"):
+            raise TypeError("coefficient_ring must be a PrimePie ring.")
+        if not isinstance(variable, str) or len(variable) != 1:
+            raise ValueError("variable must be exactly one character.")
 
-    def _mpower_elementwise(self, bases, exponents):
-        return self._backend.mpower(list(bases), [int(e) for e in exponents])
+        self.coefficient_ring = coefficient_ring
+        cpp_instance = _core.algebra.PolynomialRing(
+            coefficient_ring._backend,
+            variable,
+            bool(use_parentheses),
+        )
+        super().__init__(cpp_instance)
 
-    # --- single public entrypoint for multiplicative power ---
-    def mpower(self, base_or_bases, exponent_or_exponents):
-        """
-        Multiplicative power on Z/nZ:
-          - mpower(int base, int exponent) -> int
-          - mpower(Iterable[int] bases, int exponent) -> list[int]
-          - mpower(Iterable[int] bases, Iterable[int] exponents) -> list[int]
-
-        Note: negative exponents are not supported for general rings (backend will raise).
-        """
-        b = base_or_bases
-        e = exponent_or_exponents
-
-        if isinstance(b, int) and isinstance(e, int):
-            return self._mpower_scalar(b, e)
-        if not isinstance(b, int) and isinstance(e, int):
-            return self._mpower_batch(b, e)
-        if not isinstance(b, int) and not isinstance(e, int):
-            return self._mpower_elementwise(b, e)
-
-        raise TypeError("mpower expects (int,int), (Iterable[int],int), or (Iterable[int],Iterable[int]).")
-
-
-
-
-# ========================================
-# Polynomial over integers one variable : ℤ[X]
-# ========================================
-
-
-Poly = List[int]
-MulMethod = Literal["naive", "karatsuba", "auto"]
-
-def _as_poly(p: Iterable[int]) -> Poly:
-    """Coerce any iterable of ints into a list[int]; raises if not integers."""
-    if isinstance(p, (bytes, bytearray, str)):
-        raise TypeError("Polynomial coefficients must be integers, not strings/bytes.")
-    out = [int(c) for c in p]
-    return out
-
-class PolynomialsOverIntegers:
-    """
-    Z[x] wrapper.
-
-    Elements are represented as Python lists of ints in increasing degree order:
-        [a0, a1, ..., an]  <=>  a0 + a1 x + ... + an x^n
-
-    By default, multiplication uses a strategy you choose via `method`:
-      - "naive":     schoolbook O(n*m)
-      - "karatsuba": asymptotically faster for larger degree
-      - "auto":      pick per-call (currently defaults to "naive", customize below)
-
-    Examples
-    --------
-    >>> P = PolynomialsOverIntegers(method="karatsuba")
-    >>> f, g = [1,2,3], [3,0,-1]
-    >>> P.to_string(P.add(f,g))
-    '4 + 2x + 2x^2'
-    >>> P.to_string(P.mul(f,g))
-    '3 + 6x + 8x^2 - 2x^3 - 3x^4'
-    >>> P.mpower([0,1], 5)   # x^5
-    [0, 0, 0, 0, 0, 1]
-    """
-
-    def __init__(self, method: MulMethod = "naive"):
-        self._backend = _core.algebra.PolynomialsOverIntegers()
-        if method not in ("naive", "karatsuba", "auto"):
-            raise ValueError("method must be 'naive', 'karatsuba', or 'auto'")
-        self._method: MulMethod = method
-
-    # --------- configuration ---------
     @property
-    def method(self) -> MulMethod:
-        return self._method
+    def variable(self) -> str:
+        return self._backend.variable
 
-    @method.setter
-    def method(self, value: MulMethod) -> None:
-        if value not in ("naive", "karatsuba", "auto"):
-            raise ValueError("method must be 'naive', 'karatsuba', or 'auto'")
-        self._method = value
+    def element(self, value):
+        if isinstance(value, int) or isinstance(value, Element):
+            return self._backend.element([value])
+        return self._backend.element(value)
 
-    # --------- ring primitives ---------
-    def zero(self) -> Poly:
-        return self._backend.zero()
+    def power(self, base, exponent):
+        return self._backend.power(base, int(exponent))
 
-    def one(self) -> Poly:
-        return self._backend.one()
-
-    def add(self, f: Sequence[int], g: Sequence[int]) -> Poly:
-        return self._backend.add(_as_poly(f), _as_poly(g))
-
-    def neg(self, f: Sequence[int]) -> Poly:
-        return self._backend.neg(_as_poly(f))
-
-    def sub(self, f: Sequence[int], g: Sequence[int]) -> Poly:
-        return self._backend.sub(_as_poly(f), _as_poly(g))
-
-    # --------- multiplication ---------
-    def mul_naive(self, f: Sequence[int], g: Sequence[int]) -> Poly:
-        return self._backend.mul_naive(_as_poly(f), _as_poly(g))
-
-    def mul_karatsuba(self, f: Sequence[int], g: Sequence[int]) -> Poly:
-        return self._backend.mul_karatsuba(_as_poly(f), _as_poly(g))
-
-    def mul(
-        self,
-        f: Sequence[int],
-        g: Sequence[int],
-        method: Optional[MulMethod] = None
-    ) -> Poly:
-        """
-        Multiply f and g using:
-          - method="naive"     -> C++ schoolbook
-          - method="karatsuba" -> C++ karatsuba
-          - method=None        -> uses self.method
-          - method="auto"      -> currently defaults to naive; tweak this policy as you like.
-        """
-        m = self._method if method is None else method
-        f_, g_ = _as_poly(f), _as_poly(g)
-        if m == "naive":
-            return self._backend.mul_naive(f_, g_)
-        elif m == "karatsuba":
-            return self._backend.mul_karatsuba(f_, g_)
-        elif m == "auto":
-            # Policy: choose based on size; adjust threshold as you see fit.
-            # Simple default: use naive (it’s very fast for small/medium degrees).
-            # For example, switch at ~64 terms:
-            if max(len(f_), len(g_)) >= 64:
-                return self._backend.mul_karatsuba(f_, g_)
-            return self._backend.mul_naive(f_, g_)
-        else:
-            raise ValueError("Unknown method")
-
-
-
-    # --------- helpers / predicates ---------
-    def is_equal(self, f: Sequence[int], g: Sequence[int]) -> bool:
-        return self._backend.is_equal(_as_poly(f), _as_poly(g))
-
-    def contains(self, f: Sequence[int]) -> bool:
-        # C++ always returns true for any int-list representation
-        return self._backend.contains(_as_poly(f))
-
-    @staticmethod
-    def degree(f: Sequence[int]) -> int:
-        return _core.algebra.PolynomialsOverIntegers.degree(_as_poly(f))
-
-    @staticmethod
-    def is_zero(f: Sequence[int]) -> bool:
-        return _core.algebra.PolynomialsOverIntegers.is_zero(_as_poly(f))
-
-    @staticmethod
-    def normalize(f: Sequence[int]) -> Poly:
-        """Return a trimmed (canonical) copy."""
-        return _core.algebra.PolynomialsOverIntegers.normalized(_as_poly(f))
-
-    @staticmethod
-    def to_string(f: Sequence[int]) -> str:
-        return _core.algebra.PolynomialsOverIntegers.to_string(_as_poly(f))
-
-
-
-
-
-
-
-
+    def mpower(self, base, exponent):
+        return self._backend.mpower(base, int(exponent))
 
 
 if __name__ == "__main__":
