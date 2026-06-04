@@ -36,6 +36,7 @@ __pycache__/
 
 # Ignore build directory (CMake)
 cpp/build/
+cpp/build-*/
 
 
 .DS_Store

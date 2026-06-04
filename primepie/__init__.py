@@ -6,11 +6,13 @@ from .algebra.algebraic_structures import (
     DirectSumGroup,
     IntegersModRing,
     Integers,
+    RationalField,
+    FiniteField,
     PolynomialRing,
 )
 
 __all__ = [
     "primes", "nth_prime", "first_primes", "primes_table_size",
     "AdditiveModGroup", "GroupProperty", "MultiplicativeModGroup", "DirectSumGroup",
-    "IntegersModRing", "Integers", "PolynomialRing",
+    "IntegersModRing", "Integers", "RationalField", "FiniteField", "PolynomialRing",
 ]

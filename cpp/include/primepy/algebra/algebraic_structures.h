@@ -11,6 +11,7 @@
 namespace primepy::algebra {
 
 using Integer = mpz_class;
+using Rational = mpq_class;
 
 enum class GroupProperty {
     Finite,
@@ -25,9 +26,10 @@ class Group;
 class Element {
 public:
     using Vector = std::vector<Element>;
-    using Data = std::variant<Integer, Vector>;
+    using Data = std::variant<Integer, Rational, Vector>;
 
     Element(std::shared_ptr<const Group> parent, Integer value);
+    Element(std::shared_ptr<const Group> parent, Rational value);
     Element(std::shared_ptr<const Group> parent, long value);
     Element(std::shared_ptr<const Group> parent, int value);
     Element(std::shared_ptr<const Group> parent, Vector value);
@@ -56,6 +58,7 @@ public:
     const std::vector<GroupProperty>& properties() const { return properties_; }
 
     virtual Element element(const Integer& value) const;
+    virtual Element element(const Rational& value) const;
     virtual Element element(const Element::Vector& values) const;
 
     virtual Element identity() const = 0;
@@ -130,6 +133,26 @@ public:
 
 protected:
     explicit Ring(std::vector<GroupProperty> properties = {});
+};
+
+//=============================
+// Runtime Field Interface
+//=============================
+class Field : public Ring {
+public:
+    virtual ~Field() = default;
+
+    virtual Element reciprocal(const Element& a) const = 0;
+    virtual Element div(const Element& a, const Element& b) const;
+    virtual Integer characteristic() const = 0;
+
+    Element mpower(const Element& base, long long exponent) const override;
+    std::vector<Element> mpower(const std::vector<Element>& bases, long long exponent) const override;
+    std::vector<Element> mpower(const std::vector<Element>& bases,
+                                const std::vector<long long>& exponents) const override;
+
+protected:
+    explicit Field(std::vector<GroupProperty> properties = {});
 };
 
 

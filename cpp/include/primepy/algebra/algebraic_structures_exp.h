@@ -171,6 +171,69 @@ private:
     }
 };
 
+//=============================
+// Rational field: ℚ
+//=============================
+class RationalField : public Field {
+public:
+    using Field::mpower;
+    using Field::power;
+
+    RationalField();
+
+    Element element(const Integer& value) const override;
+    Element element(const Rational& value) const override;
+    Element zero() const override;
+    Element one() const override;
+    Element add(const Element& a, const Element& b) const override;
+    Element neg(const Element& a) const override;
+    Element mul(const Element& a, const Element& b) const override;
+    Element reciprocal(const Element& a) const override;
+
+    bool contains(const Element& a) const override;
+    bool equals(const Element& a, const Element& b) const override;
+    std::string repr(const Element& a) const override;
+    Integer characteristic() const override;
+
+private:
+    static Rational canonical(const Rational& value);
+    static const Rational& raw(const Element& element);
+};
+
+//=============================
+// Finite field: currently prime fields 𝔽_p
+//=============================
+class FiniteField : public Field {
+public:
+    using Field::mpower;
+    using Field::power;
+
+    explicit FiniteField(int prime, int degree = 1);
+
+    Element element(const Integer& value) const override;
+    Element element(const Rational& value) const override;
+    Element zero() const override;
+    Element one() const override;
+    Element add(const Element& a, const Element& b) const override;
+    Element neg(const Element& a) const override;
+    Element mul(const Element& a, const Element& b) const override;
+    Element reciprocal(const Element& a) const override;
+
+    bool contains(const Element& a) const override;
+    bool equals(const Element& a, const Element& b) const override;
+    std::string repr(const Element& a) const override;
+    Integer characteristic() const override;
+
+    int modulus() const { return p; }
+    int degree() const { return n; }
+
+private:
+    int p;
+    int n;
+    int normalize(const Integer& value) const;
+    int inverse_mod(int value, const std::string& operation) const;
+};
+
 
 //=============================
 // Polynomial ring in one variable: R[X]

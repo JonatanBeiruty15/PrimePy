@@ -15,13 +15,58 @@ Integer integer_from_py(py::handle raw) {
     return Integer(py::str(raw).cast<std::string>());
 }
 
+Rational rational_from_py(py::handle raw) {
+    if (py::isinstance<py::int_>(raw)) {
+        return Rational(integer_from_py(raw));
+    }
+    if (py::isinstance<py::float_>(raw)) {
+        py::object fraction = py::module_::import("fractions").attr("Fraction")(
+            py::str(py::repr(raw))
+        );
+        Integer numerator(py::str(fraction.attr("numerator")).cast<std::string>());
+        Integer denominator(py::str(fraction.attr("denominator")).cast<std::string>());
+        Rational value(numerator, denominator);
+        value.canonicalize();
+        return value;
+    }
+    if (!py::hasattr(raw, "numerator") || !py::hasattr(raw, "denominator")) {
+        throw std::invalid_argument("expected an integer, float, or fractions.Fraction.");
+    }
+
+    Integer numerator(py::str(raw.attr("numerator")).cast<std::string>());
+    Integer denominator(py::str(raw.attr("denominator")).cast<std::string>());
+    if (denominator == 0) {
+        throw std::invalid_argument("rational conversion: denominator cannot be zero.");
+    }
+
+    Rational value(numerator, denominator);
+    value.canonicalize();
+    return value;
+}
+
+bool is_rational_like(py::handle raw) {
+    return py::isinstance<py::float_>(raw)
+        || (py::hasattr(raw, "numerator") && py::hasattr(raw, "denominator"));
+}
+
 py::object integer_to_py(const Integer& value) {
     return py::module_::import("builtins").attr("int")(value.get_str());
+}
+
+py::object rational_to_py(const Rational& value) {
+    return py::module_::import("fractions").attr("Fraction")(
+        integer_to_py(value.get_num()),
+        integer_to_py(value.get_den())
+    );
 }
 
 py::object element_value_to_py(const Element& element) {
     if (std::holds_alternative<Integer>(element.data())) {
         return integer_to_py(std::get<Integer>(element.data()));
+    }
+
+    if (std::holds_alternative<Rational>(element.data())) {
+        return rational_to_py(std::get<Rational>(element.data()));
     }
 
     const auto& parts = std::get<Element::Vector>(element.data());
@@ -47,6 +92,15 @@ Element element_from_py(std::shared_ptr<const Group> group, py::handle raw) {
 
     if (py::isinstance<py::int_>(raw)) {
         Integer value = integer_from_py(raw);
+        auto polynomial_ring = std::dynamic_pointer_cast<const PolynomialRing>(group);
+        if (polynomial_ring) {
+            return polynomial_ring->coefficient_ring()->element(value);
+        }
+        return group->element(value);
+    }
+
+    if (is_rational_like(raw)) {
+        Rational value = rational_from_py(raw);
         auto polynomial_ring = std::dynamic_pointer_cast<const PolynomialRing>(group);
         if (polynomial_ring) {
             return polynomial_ring->coefficient_ring()->element(value);
@@ -249,10 +303,29 @@ void bind_algebra(py::module_& m) {
             return r->mpower(elements_from_py_sequence(r, bases), exps);
         }, py::arg("bases"), py::arg("exponents"));
 
+    py::class_<Field, Ring, std::shared_ptr<Field>>(m, "Field")
+        .def("reciprocal", [](std::shared_ptr<Field> f, py::object a) {
+            return f->reciprocal(element_from_py(f, a));
+        }, py::arg("a"))
+        .def("div", [](std::shared_ptr<Field> f, py::object a, py::object b) {
+            return f->div(element_from_py(f, a), element_from_py(f, b));
+        }, py::arg("a"), py::arg("b"))
+        .def_property_readonly("characteristic", [](const Field& f) {
+            return integer_to_py(f.characteristic());
+        });
+
     // Ring of integers modulo n: ℤ/nℤ
     py::class_<IntegersModRing, Ring, std::shared_ptr<IntegersModRing>>(m, "IntegersModRing")
         .def(py::init<int>(), py::arg("modulus"))
         .def_property_readonly("modulus", &IntegersModRing::modulus);
+
+    py::class_<RationalField, Field, std::shared_ptr<RationalField>>(m, "RationalField")
+        .def(py::init<>());
+
+    py::class_<FiniteField, Field, std::shared_ptr<FiniteField>>(m, "FiniteField")
+        .def(py::init<int, int>(), py::arg("prime"), py::arg("degree") = 1)
+        .def_property_readonly("modulus", &FiniteField::modulus)
+        .def_property_readonly("degree", &FiniteField::degree);
 
     // Polynomial ring in one variable: R[X]
     py::class_<PolynomialRing, Ring, std::shared_ptr<PolynomialRing>>(m, "PolynomialRing")

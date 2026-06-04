@@ -14,6 +14,10 @@ static std::string debug_string(const Integer& value) {
     return value.get_str();
 }
 
+static std::string debug_string(const Rational& value) {
+    return value.get_str();
+}
+
 template<typename T>
 static std::string debug_string(const T& value) {
     std::ostringstream out;
@@ -74,9 +78,92 @@ static Integer raw_int(const Element& element) {
     return std::get<Integer>(element.data());
 }
 
+static Rational rational(long numerator, long denominator) {
+    Rational value(numerator, denominator);
+    value.canonicalize();
+    return value;
+}
+
+static Rational raw_rational(const Element& element) {
+    return std::get<Rational>(element.data());
+}
+
 static const Element::Vector& raw_vector(const Element& element) {
     return std::get<Element::Vector>(element.data());
 }
+
+class TestField5 final : public Field {
+public:
+    TestField5()
+        : Field({GroupProperty::Finite, GroupProperty::Abelian})
+    {
+    }
+
+    Element element(const Integer& value) const override {
+        return Element(self(), normalize(value));
+    }
+
+    Element zero() const override { return element(0); }
+    Element one() const override { return element(1); }
+
+    Element add(const Element& a, const Element& b) const override {
+        require_same_parent(a, b, "TestField5::add");
+        return element(raw(a) + raw(b));
+    }
+
+    Element neg(const Element& a) const override {
+        require_parent(a, "TestField5::neg");
+        return element(-raw(a));
+    }
+
+    Element mul(const Element& a, const Element& b) const override {
+        require_same_parent(a, b, "TestField5::mul");
+        return element(raw(a) * raw(b));
+    }
+
+    Element reciprocal(const Element& a) const override {
+        require_parent(a, "TestField5::reciprocal");
+        const Integer value = normalize(raw(a));
+        if (value == 0) {
+            throw std::invalid_argument("TestField5::reciprocal: zero has no reciprocal.");
+        }
+        for (int candidate = 1; candidate < 5; ++candidate) {
+            if (normalize(value * candidate) == 1) {
+                return element(candidate);
+            }
+        }
+        throw std::logic_error("TestField5::reciprocal: no reciprocal found.");
+    }
+
+    bool contains(const Element& a) const override {
+        return a.parent().get() == this && std::holds_alternative<Integer>(a.data());
+    }
+
+    bool equals(const Element& a, const Element& b) const override {
+        require_same_parent(a, b, "TestField5::equals");
+        return raw(a) == raw(b);
+    }
+
+    std::string repr(const Element& a) const override {
+        require_parent(a, "TestField5::repr");
+        return raw(a).get_str() + " mod 5";
+    }
+
+    Integer characteristic() const override { return 5; }
+
+private:
+    static Integer normalize(const Integer& value) {
+        Integer result = value % 5;
+        if (result < 0) {
+            result += 5;
+        }
+        return result;
+    }
+
+    static const Integer& raw(const Element& element) {
+        return std::get<Integer>(element.data());
+    }
+};
 
 int main() {
     // ---------------------------------------------------------------------
@@ -177,6 +264,90 @@ int main() {
     if (expect_throws([&] {
         (void)U8->element(2);
     }, "non-unit in multiplicative group")) return 1;
+
+    // ---------------------------------------------------------------------
+    // Runtime field interface
+    //
+    // This small test-only field verifies the abstract Field behavior before
+    // concrete fields such as Q and F_p are added to the library.
+    // ---------------------------------------------------------------------
+    auto F5 = std::make_shared<TestField5>();
+    EXPECT_EQ(raw_int(F5->div(F5->element(3), F5->element(2))), 4);
+    EXPECT_EQ(raw_int(F5->mpower(F5->element(2), -1)), 3);
+    EXPECT_EQ(raw_int(F5->mpower(F5->element(2), -3)), 2);
+    EXPECT_EQ(F5->characteristic(), Integer(5));
+
+    {
+        std::vector<Element> bases{F5->element(2), F5->element(3)};
+        auto out = F5->mpower(bases, -1);
+        EXPECT_EQ(raw_int(out[0]), 3);
+        EXPECT_EQ(raw_int(out[1]), 2);
+
+        auto elemwise = F5->mpower(bases, std::vector<long long>{-1, 2});
+        EXPECT_EQ(raw_int(elemwise[0]), 3);
+        EXPECT_EQ(raw_int(elemwise[1]), 4);
+    }
+
+    if (expect_throws([&] {
+        (void)F5->reciprocal(F5->zero());
+    }, "zero reciprocal in field")) return 1;
+
+    {
+        auto Q = std::make_shared<RationalField>();
+        auto a = Q->element(rational(2, 3));
+        auto b = Q->element(rational(5, 7));
+
+        EXPECT_EQ(raw_rational(Q->element(rational(2, 4))), rational(1, 2));
+        EXPECT_EQ(raw_rational(Q->zero()), rational(0, 1));
+        EXPECT_EQ(raw_rational(Q->one()), rational(1, 1));
+        EXPECT_EQ(Q->characteristic(), Integer(0));
+        EXPECT_EQ(raw_rational(Q->add(a, b)), rational(29, 21));
+        EXPECT_EQ(raw_rational(Q->neg(a)), rational(-2, 3));
+        EXPECT_EQ(raw_rational(Q->mul(a, b)), rational(10, 21));
+        EXPECT_EQ(raw_rational(Q->reciprocal(a)), rational(3, 2));
+        EXPECT_EQ(raw_rational(Q->div(a, b)), rational(14, 15));
+        EXPECT_EQ(raw_rational(Q->mpower(a, -2)), rational(9, 4));
+        EXPECT_EQ(Q->element(rational(2, 4)).repr(), std::string("1/2"));
+
+        if (expect_throws([&] {
+            (void)Q->reciprocal(Q->zero());
+        }, "zero reciprocal in rational field")) return 1;
+    }
+
+    {
+        auto F = std::make_shared<FiniteField>(5);
+        EXPECT_EQ(F->modulus(), 5);
+        EXPECT_EQ(F->degree(), 1);
+        EXPECT_EQ(F->characteristic(), Integer(5));
+        EXPECT_EQ(raw_int(F->element(Integer(12))), 2);
+        EXPECT_EQ(raw_int(F->element(rational(1, 2))), 3);
+        EXPECT_EQ(F->element(Integer(12)).repr(), std::string("2 mod 5"));
+        EXPECT_EQ(raw_int(F->add(F->element(Integer(3)), F->element(Integer(4)))), 2);
+        EXPECT_EQ(raw_int(F->neg(F->element(Integer(3)))), 2);
+        EXPECT_EQ(raw_int(F->mul(F->element(Integer(3)), F->element(Integer(4)))), 2);
+        EXPECT_EQ(raw_int(F->reciprocal(F->element(Integer(2)))), 3);
+        EXPECT_EQ(raw_int(F->div(F->element(Integer(3)), F->element(Integer(2)))), 4);
+        EXPECT_EQ(raw_int(F->mpower(F->element(Integer(2)), -3)), 2);
+
+        if (expect_throws([&] {
+            auto bad = std::make_shared<FiniteField>(6);
+            (void)bad;
+        }, "composite finite field modulus")) return 1;
+
+        if (expect_throws([&] {
+            auto bad = std::make_shared<FiniteField>(5, 0);
+            (void)bad;
+        }, "non-positive finite field degree")) return 1;
+
+        if (expect_throws([&] {
+            auto unsupported = std::make_shared<FiniteField>(5, 2);
+            (void)unsupported;
+        }, "higher-degree finite field")) return 1;
+
+        if (expect_throws([&] {
+            (void)F->element(rational(1, 5));
+        }, "rational with zero denominator modulo p")) return 1;
+    }
 
     // ---------------------------------------------------------------------
     // Direct sum Z/5Z + Z/7Z

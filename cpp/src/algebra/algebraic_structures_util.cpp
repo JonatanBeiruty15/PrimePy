@@ -1,12 +1,21 @@
 #include "primepy/algebra/algebraic_structures_utils.h"
 
 #include <algorithm>
+#include <limits>
 #include <sstream>
 #include <utility>
 
 namespace primepy::algebra {
 
 Element::Element(std::shared_ptr<const Group> parent, Integer value)
+    : parent_(std::move(parent)), data_(std::move(value))
+{
+    if (!parent_) {
+        throw std::invalid_argument("Element: parent group must be non-null.");
+    }
+}
+
+Element::Element(std::shared_ptr<const Group> parent, Rational value)
     : parent_(std::move(parent)), data_(std::move(value))
 {
     if (!parent_) {
@@ -43,6 +52,10 @@ std::string Element::repr() const {
 
 Element Group::element(const Integer& /*value*/) const {
     throw std::invalid_argument("This group does not accept integer elements.");
+}
+
+Element Group::element(const Rational& /*value*/) const {
+    throw std::invalid_argument("This group does not accept rational elements.");
 }
 
 Group::Group(std::vector<GroupProperty> properties)
@@ -87,10 +100,17 @@ void Group::require_parent(const Element& a, const std::string& operation) const
     }
 }
 
+
 void Group::require_same_parent(const Element& a, const Element& b, const std::string& operation) const {
     require_parent(a, operation);
     require_parent(b, operation);
 }
+
+
+
+
+
+
 
 DirectSumGroup::DirectSumGroup(std::vector<std::shared_ptr<const Group>> factors)
     : Group(infer_properties(factors)), factors_(std::move(factors))
@@ -333,6 +353,59 @@ std::vector<Element> Ring::mpower(const std::vector<Element>& bases,
                                   const std::vector<long long>& exponents) const {
     if (bases.size() != exponents.size()) {
         throw std::invalid_argument("Ring::mpower(vec, vec): sizes must match.");
+    }
+
+    std::vector<Element> results(bases.size(), one());
+
+#ifdef _OPENMP
+    #pragma omp parallel for
+#endif
+    for (int i = 0; i < static_cast<int>(bases.size()); ++i) {
+        results[i] = mpower(bases[i], exponents[i]);
+    }
+    return results;
+}
+
+Field::Field(std::vector<GroupProperty> properties)
+    : Ring(std::move(properties))
+{
+}
+
+Element Field::div(const Element& a, const Element& b) const {
+    require_parent(a, "Field::div");
+    require_parent(b, "Field::div");
+    return mul(a, reciprocal(b));
+}
+
+Element Field::mpower(const Element& base, long long exponent) const {
+    require_parent(base, "Field::mpower");
+    if (exponent >= 0) {
+        return Ring::mpower(base, exponent);
+    }
+
+    Element inverse_base = reciprocal(base);
+    if (exponent == std::numeric_limits<long long>::min()) {
+        return mul(Ring::mpower(inverse_base, std::numeric_limits<long long>::max()), inverse_base);
+    }
+    return Ring::mpower(inverse_base, -exponent);
+}
+
+std::vector<Element> Field::mpower(const std::vector<Element>& bases, long long exponent) const {
+    std::vector<Element> results(bases.size(), one());
+
+#ifdef _OPENMP
+    #pragma omp parallel for
+#endif
+    for (int i = 0; i < static_cast<int>(bases.size()); ++i) {
+        results[i] = mpower(bases[i], exponent);
+    }
+    return results;
+}
+
+std::vector<Element> Field::mpower(const std::vector<Element>& bases,
+                                   const std::vector<long long>& exponents) const {
+    if (bases.size() != exponents.size()) {
+        throw std::invalid_argument("Field::mpower(vec, vec): sizes must match.");
     }
 
     std::vector<Element> results(bases.size(), one());

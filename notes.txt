@@ -22,13 +22,23 @@ TODO
 
 1. change the gcd function of integers to be also for vectors. maybe write this function for eucleadian rings in general.
 
-2. Think of a solution to the problem with the binding of the different types of algebraic structures, and the mpower that are different
+2. Fix the code like blocks in the practical guide.
 
-3. Fix the code like blocks in the practical guide.
+3. implement in python all the rings i implemented in cpp
 
-4. implement in python all the rings i implemented in cpp
+4. Make sure a fresh clone can build on another computer: currently cpp/external/pybind11 and cpp/external/eigen are expected by CMake, but they are not tracked by git.
 
+5. Make pip install build the C++ extension. At the moment setup.py/pyproject.toml install the Python package, but do not build _core through CMake.
 
+6. Decide how GMP should be installed/found on each operating system, especially Windows.
+
+7. Make OpenMP optional. If OpenMP is not found, the library should still compile and run single-threaded.
+
+8. Fix endian handling in the prime table reader so it also compiles on MSVC/Windows.
+
+9. Change CMake install paths so builds do not install generated files directly into the source tree.
+
+10. Implement higher-degree finite fields F_{p^n} for n > 1. Add a constructor such as FiniteField(p, degree=n, modulus=f), where f is an irreducible polynomial over F_p; validate that degree(f) == n and reject incompatible modulus/degree pairs.
 
 
 
@@ -145,4 +155,3 @@ TODO
         }
     ]
 }
-

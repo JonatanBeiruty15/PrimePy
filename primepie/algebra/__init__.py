@@ -16,8 +16,11 @@ from .algebraic_structures import (
     MultiplicativeModGroup,
     DirectSumGroup,
     Ring,
+    Field,
     Integers,
     IntegersModRing,
+    RationalField,
+    FiniteField,
     PolynomialRing,
 )
 
@@ -29,7 +32,10 @@ __all__ = [
     "MultiplicativeModGroup",
     "DirectSumGroup",
     "Ring",
+    "Field",
     "Integers",
     "IntegersModRing",
+    "RationalField",
+    "FiniteField",
     "PolynomialRing",
 ]

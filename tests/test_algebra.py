@@ -3,6 +3,7 @@
 import sys
 import os
 import pytest
+from fractions import Fraction
 
 # -----------------------------------------------------------------------------------
 # Ensure project root (folder containing 'primepie') is on sys.path for direct pytest
@@ -16,6 +17,8 @@ from primepie.algebra.algebraic_structures import (
     DirectSumGroup,
     IntegersModRing,
     Integers,
+    RationalField,
+    FiniteField,
     PolynomialRing,
 )
 
@@ -157,6 +160,74 @@ def test_direct_sum_validation_errors():
         Z5.operate(Z5(1), Z7(1))
 
 
+def test_large_mixed_direct_sum_elementwise_batch_power():
+    """A mixed direct sum with many factors supports batch powers."""
+    component_specs = [
+        ("add", 5),
+        ("mul", 7),
+        ("add", 8),
+        ("mul", 11),
+        ("add", 9),
+        ("mul", 13),
+        ("add", 10),
+        ("mul", 17),
+        ("add", 12),
+        ("mul", 19),
+        ("add", 14),
+        ("mul", 23),
+        ("add", 15),
+        ("mul", 29),
+        ("add", 16),
+    ]
+    groups = [
+        AdditiveModGroup(modulus) if kind == "add" else MultiplicativeModGroup(modulus)
+        for kind, modulus in component_specs
+    ]
+    G = DirectSumGroup(groups)
+
+    def coordinate(i, j, kind, modulus):
+        if kind == "add":
+            return (i * (j + 2) + 3 * j) % modulus
+        return 1 + ((i * (j + 3) + 2 * j) % (modulus - 1))
+
+    def expected_coordinate(value, exponent, kind, modulus):
+        if kind == "add":
+            return (value * exponent) % modulus
+        return pow(value, exponent, modulus)
+
+    bases = [
+        tuple(
+            coordinate(i, j, kind, modulus)
+            for j, (kind, modulus) in enumerate(component_specs)
+        )
+        for i in range(1000)
+    ]
+    exponents = [(7 * i + 5) % 43 for i in range(1000)]
+
+    out = G.power(bases, exponents)
+
+    expected = [
+        tuple(
+            expected_coordinate(value, exponents[i], kind, modulus)
+            for value, (kind, modulus) in zip(base, component_specs)
+        )
+        for i, base in enumerate(bases)
+    ]
+    assert len(out) == 1000
+    assert [element.value for element in out] == expected
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ===================================================================================
 # SECTION 2 — RING TESTS: Integers Mod n (ℤ/nℤ)
 # ===================================================================================
@@ -243,7 +314,92 @@ def test_ring_negative_exponent_raises_for_mpower(ring_mod7):
 
 
 # ===================================================================================
-# SECTION 3 — RING TESTS: Polynomial rings R[X]
+# SECTION 3 — FIELD TESTS: Q and F_p
+# ===================================================================================
+
+def test_rational_field_basic_arithmetic():
+    Q = RationalField()
+    a = Q(Fraction(2, 3))
+    b = Q(Fraction(5, 7))
+
+    assert a.value == Fraction(2, 3)
+    assert repr(Q(Fraction(2, 4))) == "1/2"
+    assert Q(Fraction(2, 4)).value == Fraction(1, 2)
+    assert repr(Q(1.3)) == "13/10"
+    assert Q(1.3).value == Fraction(13, 10)
+    assert Q(1.344).value == Fraction(168, 125)
+    assert Q.zero().value == Fraction(0, 1)
+    assert Q.one().value == Fraction(1, 1)
+    assert Q.characteristic == 0
+    assert Q.add(a, b).value == Fraction(29, 21)
+    assert Q.neg(a).value == Fraction(-2, 3)
+    assert Q.mul(a, b).value == Fraction(10, 21)
+    assert Q.reciprocal(a).value == Fraction(3, 2)
+    assert Q.div(a, b).value == Fraction(14, 15)
+    assert Q.mpower(a, -2).value == Fraction(9, 4)
+
+
+def test_rational_field_zero_reciprocal_raises():
+    Q = RationalField()
+    with pytest.raises(ValueError):
+        Q.reciprocal(0)
+    with pytest.raises(ValueError):
+        Q.div(1, 0)
+
+
+def test_finite_field_basic_arithmetic():
+    F5 = FiniteField(5)
+
+    assert F5.modulus == 5
+    assert F5.degree == 1
+    assert F5.characteristic == 5
+    assert F5(12).value == 2
+    assert F5(Fraction(1, 2)).value == 3
+    assert repr(F5(12)) == "2 mod 5"
+    assert F5.add(3, 4).value == 2
+    assert F5.neg(3).value == 2
+    assert F5.mul(3, 4).value == 2
+    assert F5.reciprocal(2).value == 3
+    assert F5.div(3, 2).value == 4
+    assert F5.mpower(2, -1).value == 3
+    assert F5.mpower(2, -3).value == 2
+
+
+def test_finite_field_validation_errors():
+    with pytest.raises(ValueError):
+        FiniteField(1)
+    with pytest.raises(ValueError):
+        FiniteField(6)
+    with pytest.raises(ValueError):
+        FiniteField(5, degree=0)
+    with pytest.raises(ValueError):
+        FiniteField(5, degree=2)
+
+    F5 = FiniteField(5, degree=1)
+    with pytest.raises(ValueError):
+        F5.reciprocal(0)
+    with pytest.raises(ValueError):
+        F5(Fraction(1, 5))
+
+
+def test_polynomial_ring_over_rational_field():
+    Q = RationalField()
+    P = PolynomialRing(Q)
+
+    f = P([Fraction(1, 2), Fraction(2, 3)])
+    g = P([Fraction(1, 3), Fraction(1, 6)])
+
+    assert f.value == (Fraction(1, 2), Fraction(2, 3))
+    assert P.add(f, g).value == (Fraction(5, 6), Fraction(5, 6))
+    assert P.mul(f, g).value == (
+        Fraction(1, 6),
+        Fraction(11, 36),
+        Fraction(1, 9),
+    )
+
+
+# ===================================================================================
+# SECTION 4 — RING TESTS: Polynomial rings R[X]
 # ===================================================================================
 
 def test_polynomial_ring_basic_operations():
@@ -315,7 +471,7 @@ def test_polynomial_ring_validation_errors():
 
 
 # ===================================================================================
-# SECTION 4 — RING TESTS: Integers ℤ
+# SECTION 5 — RING TESTS: Integers ℤ
 # ===================================================================================
 
 def test_integers_gcd_basics():

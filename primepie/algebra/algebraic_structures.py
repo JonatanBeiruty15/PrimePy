@@ -108,6 +108,12 @@ class DirectSumGroup(Group):
         return self._backend.arity
 
     def power(self, base, exponent):
+        if isinstance(base, (list, tuple)) and not isinstance(base, Element):
+            is_batch = len(base) != self.arity
+            if is_batch:
+                if isinstance(exponent, int):
+                    return self._backend.power_many(list(base), int(exponent))
+                return self._backend.power_many(list(base), [int(e) for e in exponent])
         return self._backend.power(base, int(exponent))
     
 
@@ -155,6 +161,17 @@ class Ring(Group):
             return self._backend.mpower(list(base), [int(e) for e in exponent])
         return self._backend.mpower(base, int(exponent))
 
+
+class Field(Ring):
+    def reciprocal(self, a):
+        return self._backend.reciprocal(a)
+
+    def div(self, a, b):
+        return self._backend.div(a, b)
+
+    @property
+    def characteristic(self) -> int:
+        return self._backend.characteristic
 
 
 
@@ -243,6 +260,34 @@ class IntegersModRing(Ring):
         return self._backend.modulus
 
 
+class RationalField(Field):
+    def __init__(self):
+        cpp_instance = _core.algebra.RationalField()
+        super().__init__(cpp_instance)
+
+    def __repr__(self) -> str:
+        return "RationalField(ℚ)"
+
+
+class FiniteField(Field):
+    def __init__(self, prime: int, degree: int = 1):
+        cpp_instance = _core.algebra.FiniteField(prime, degree)
+        super().__init__(cpp_instance)
+
+    @property
+    def modulus(self) -> int:
+        return self._backend.modulus
+
+    @property
+    def degree(self) -> int:
+        return self._backend.degree
+
+    def __repr__(self) -> str:
+        if self.degree == 1:
+            return f"FiniteField({self.modulus})"
+        return f"FiniteField({self.modulus}, degree={self.degree})"
+
+
 class PolynomialRing(Ring):
     def __init__(self, coefficient_ring: Ring, variable: str = "X", use_parentheses: bool = True):
         if not hasattr(coefficient_ring, "_backend"):
@@ -274,65 +319,10 @@ class PolynomialRing(Ring):
         return self._backend.mpower(base, int(exponent))
 
 
-if __name__ == "__main__":
-    # Groups (Z/7Z, +)
-    G = AdditiveModGroup(7)
-    print("Additive group Z/7Z")
-    print("identity:", G.identity())                 # 0
-    print("inverse(3):", G.inverse(3))               # 4
-    print("operate(3,6):", G.operate(3, 6))          # 2
-    print("power(2,3):", G.power(2, 3))              # 6
-    print("power([1,2,3], 2):", G.power([1, 2, 3], 2))               # [2, 4, 6]
-    print("power([1,2,3],[0,1,2]):", G.power([1, 2, 3], [0, 1, 2]))  # [0, 2, 6]
-
-    # Ring Z/7Z
-    R = IntegersModRing(7)
-    print("\nRing Z/7Z")
-    print("zero, one:", R.zero(), R.one())           # 0 1
-    print("add(5,6):", R.add(5, 6))                  # 4
-    print("neg(3):", R.neg(3))                       # 4
-    print("mul(3,5):", R.mul(3, 5))                  # 1
-    print("is_equal(10,3):", R.is_equal(10, 3))      # True
-
-    # ADDITIVE power on the ring (inherited from Ring.power)
-    print("additive power R.power(3,4):", R.power(3, 4))  # 3+3+3+3 ≡ 5
-
-    # MULTIPLICATIVE power on the ring (IntegersModRing.mpower)
-    print("multiplicative R.mpower(3,4):", R.mpower(3, 4))                # 4
-    print("multiplicative R.mpower([1,2,3,6], 3):", R.mpower([1,2,3,6], 3))   # [1,1,6,6]
-    print("multiplicative R.mpower([2,3,4,5],[0,1,2,3]):",
-          R.mpower([2,3,4,5], [0,1,2,3]))                                 # [1,3,2,6]
-    print("(2 + 3) * 4:", R.mul(R.add(2, 3), 4))   # (2+3)*4 ≡ 20 ≡ 6 mod 7
 
 
 
 
-    print("\n=== Integers.is_prime (unified scalar + batch) ===")
 
-    # scalar checks
-    assert Integers.is_prime(2) is True
-    assert Integers.is_prime(3) is True
-    assert Integers.is_prime(4) is False
-    assert Integers.is_prime(1) is False
-    assert Integers.is_prime(0) is False
-    assert Integers.is_prime(-7) is False
-    assert Integers.is_prime(97) is True
-    assert Integers.is_prime(10007) is True
-    assert Integers.is_prime(1_000_000_007) is True  # large 32-bit prime
 
-    # batch check (order preserved)
-    nums = [2, 4, 5, 9, 1, 97, 1_000_000_007, 0, -11, 10007]
-    expected = [True, False, True, False, False, True, True, False, False, True]
-    out = Integers.is_prime(nums)
-    print("batch:", out)
-    assert out == expected, f"expected {expected}, got {out}"
 
-    # quick mixed sanity
-    assert Integers.is_prime([2, 3, 10, 11, 12]) == [True, True, False, True, False]
-
-    # (optional) error cases: wrong types should raise
-    try:
-        Integers.is_prime("13")  # type: ignore
-        raise AssertionError("Expected TypeError for string input")
-    except TypeError:
-        pass

@@ -227,17 +227,17 @@ Element Integers::one() const {
 
 Element Integers::add(const Element& a, const Element& b) const {
     require_same_parent(a, b, "Integers::add");
-    return Element(self(), std::get<Integer>(a.data()) + std::get<Integer>(b.data()));
+    return Element(self(), Integer(std::get<Integer>(a.data()) + std::get<Integer>(b.data())));
 }
 
 Element Integers::neg(const Element& a) const {
     require_parent(a, "Integers::neg");
-    return Element(self(), -std::get<Integer>(a.data()));
+    return Element(self(), Integer(-std::get<Integer>(a.data())));
 }
 
 Element Integers::mul(const Element& a, const Element& b) const {
     require_same_parent(a, b, "Integers::mul");
-    return Element(self(), std::get<Integer>(a.data()) * std::get<Integer>(b.data()));
+    return Element(self(), Integer(std::get<Integer>(a.data()) * std::get<Integer>(b.data())));
 }
 
 bool Integers::contains(const Element& a) const {
@@ -445,6 +445,193 @@ bool IntegersModRing::equals(const Element& a, const Element& b) const {
 std::string IntegersModRing::repr(const Element& a) const {
     require_parent(a, "IntegersModRing::repr");
     return std::to_string(normalize(std::get<Integer>(a.data()))) + " mod " + std::to_string(mod);
+}
+
+//=============================
+// Rational field: ℚ
+//=============================
+
+RationalField::RationalField()
+    : Field({GroupProperty::Abelian})
+{
+}
+
+Rational RationalField::canonical(const Rational& value) {
+    Rational result(value);
+    result.canonicalize();
+    return result;
+}
+
+const Rational& RationalField::raw(const Element& element) {
+    return std::get<Rational>(element.data());
+}
+
+Element RationalField::element(const Integer& value) const {
+    return Element(self(), Rational(value));
+}
+
+Element RationalField::element(const Rational& value) const {
+    return Element(self(), canonical(value));
+}
+
+Element RationalField::zero() const {
+    return Element(self(), Rational(0));
+}
+
+Element RationalField::one() const {
+    return Element(self(), Rational(1));
+}
+
+Element RationalField::add(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "RationalField::add");
+    return element(raw(a) + raw(b));
+}
+
+Element RationalField::neg(const Element& a) const {
+    require_parent(a, "RationalField::neg");
+    return element(-raw(a));
+}
+
+Element RationalField::mul(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "RationalField::mul");
+    return element(raw(a) * raw(b));
+}
+
+Element RationalField::reciprocal(const Element& a) const {
+    require_parent(a, "RationalField::reciprocal");
+    const Rational& value = raw(a);
+    if (value == 0) {
+        throw std::invalid_argument("RationalField::reciprocal: zero has no reciprocal.");
+    }
+    return element(Rational(1 / value));
+}
+
+bool RationalField::contains(const Element& a) const {
+    return a.parent().get() == this && std::holds_alternative<Rational>(a.data());
+}
+
+bool RationalField::equals(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "RationalField::equals");
+    return raw(a) == raw(b);
+}
+
+std::string RationalField::repr(const Element& a) const {
+    require_parent(a, "RationalField::repr");
+    return raw(a).get_str();
+}
+
+Integer RationalField::characteristic() const {
+    return 0;
+}
+
+//=============================
+// Finite field: currently prime fields 𝔽_p
+//=============================
+
+FiniteField::FiniteField(int prime, int degree)
+    : Field({GroupProperty::Finite, GroupProperty::Abelian}), p(prime), n(degree)
+{
+    if (degree < 1) {
+        throw std::invalid_argument("FiniteField: degree must be positive.");
+    }
+    if (degree != 1) {
+        throw std::invalid_argument("FiniteField: extension fields F_{p^n} for n > 1 are not implemented yet.");
+    }
+    if (prime <= 1 || !Integers::is_prime(Integer(prime))) {
+        throw std::invalid_argument("FiniteField: characteristic must be prime.");
+    }
+}
+
+int FiniteField::normalize(const Integer& value) const {
+    return normalize_mod_int(value, p);
+}
+
+int FiniteField::inverse_mod(int value, const std::string& operation) const {
+    int a = normalize(value);
+    if (a == 0) {
+        throw std::invalid_argument(operation + ": zero has no reciprocal.");
+    }
+
+    int t = 0;
+    int new_t = 1;
+    int r = p;
+    int new_r = a;
+
+    while (new_r != 0) {
+        int q = r / new_r;
+
+        int temp_t = t - q * new_t;
+        t = new_t;
+        new_t = temp_t;
+
+        int temp_r = r - q * new_r;
+        r = new_r;
+        new_r = temp_r;
+    }
+
+    if (r != 1) {
+        throw std::invalid_argument(operation + ": element is not invertible.");
+    }
+    return normalize(t);
+}
+
+Element FiniteField::element(const Integer& value) const {
+    return Element(self(), normalize(value));
+}
+
+Element FiniteField::element(const Rational& value) const {
+    Rational canonical_value(value);
+    canonical_value.canonicalize();
+    Integer numerator = canonical_value.get_num();
+    Integer denominator = canonical_value.get_den();
+    int denominator_inverse = inverse_mod(normalize(denominator), "FiniteField::element");
+    return element(Integer(numerator * denominator_inverse));
+}
+
+Element FiniteField::zero() const {
+    return Element(self(), 0);
+}
+
+Element FiniteField::one() const {
+    return Element(self(), 1);
+}
+
+Element FiniteField::add(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "FiniteField::add");
+    return element(Integer(std::get<Integer>(a.data()) + std::get<Integer>(b.data())));
+}
+
+Element FiniteField::neg(const Element& a) const {
+    require_parent(a, "FiniteField::neg");
+    return element(Integer(-std::get<Integer>(a.data())));
+}
+
+Element FiniteField::mul(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "FiniteField::mul");
+    return element(Integer(std::get<Integer>(a.data()) * std::get<Integer>(b.data())));
+}
+
+Element FiniteField::reciprocal(const Element& a) const {
+    require_parent(a, "FiniteField::reciprocal");
+    return element(Integer(inverse_mod(normalize(std::get<Integer>(a.data())), "FiniteField::reciprocal")));
+}
+
+bool FiniteField::contains(const Element& a) const {
+    return a.parent().get() == this && std::holds_alternative<Integer>(a.data());
+}
+
+bool FiniteField::equals(const Element& a, const Element& b) const {
+    require_same_parent(a, b, "FiniteField::equals");
+    return normalize(std::get<Integer>(a.data())) == normalize(std::get<Integer>(b.data()));
+}
+
+std::string FiniteField::repr(const Element& a) const {
+    require_parent(a, "FiniteField::repr");
+    return std::to_string(normalize(std::get<Integer>(a.data()))) + " mod " + std::to_string(p);
+}
+
+Integer FiniteField::characteristic() const {
+    return p;
 }
 
 
